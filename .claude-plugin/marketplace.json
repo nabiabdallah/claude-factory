@@ -1,0 +1,14 @@
+{
+  "name": "claude-factory",
+  "description": "Personal software factory: agentic coding pipelines for Java services",
+  "owner": {
+    "name": "Noel Abi Abdallah"
+  },
+  "plugins": [
+    {
+      "name": "java-pipeline",
+      "source": "./plugins/java-pipeline",
+      "description": "Spec → plan → architect review → TDD → verify gate → code review for Spring Boot hexagonal services, plus /new-project scaffolding"
+    }
+  ]
+}
