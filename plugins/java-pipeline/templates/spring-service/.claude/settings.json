@@ -27,8 +27,8 @@
   "extraKnownMarketplaces": {
     "claude-factory": {
       "source": {
-        "source": "directory",
-        "path": "/home/noel/dev/factory/claude-factory"
+        "source": "github",
+        "repo": "nabiabdallah/claude-factory"
       }
     }
   },
