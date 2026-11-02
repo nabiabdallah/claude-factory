@@ -39,6 +39,8 @@ Follow these stages in order. Do not skip a stage; stop and ask the user if one 
 - Delegate to the `java-pipeline:code-reviewer` agent. Fix every MUST FIX item, then re-run `mvnw-sandboxed -q verify`.
 
 ## 7. Hand-off
-- Commit on a feature branch with a message referencing the spec.
+- Commit on a feature branch with a message referencing the spec. Stage files by path
+  (`git add src/... docs/...`); never `git add -A` or `git add .` — inside the sandbox those
+  pick up `/dev/null` placeholders under `.claude/` and fail.
 - Report to the user: what was built, acceptance criteria → tests mapping,
   reviewer findings you fixed, anything deferred, and whether an ADR was written.

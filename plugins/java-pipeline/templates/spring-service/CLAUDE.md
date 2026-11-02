@@ -41,3 +41,4 @@ com.example.payments
 - Don't edit `ArchitectureTest` to make a build pass. If a rule is wrong, stop and say so.
 - Don't add dependencies without stating why in the plan.
 - Don't read `.env` or anything under `secrets/`.
+- Stage files by path when committing; never `git add -A` / `git add .` (sandbox placeholders under `.claude/` break it).
