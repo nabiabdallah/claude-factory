@@ -21,6 +21,8 @@
     <java.version>21</java.version>
     <archunit.version>1.5.1</archunit.version>
     <spotless.version>3.10.4</spotless.version>
+    <!-- Defined empty so @{argLine} resolves when no other plugin (e.g. JaCoCo) sets it. -->
+    <argLine></argLine>
   </properties>
 
   <dependencies>
@@ -51,6 +53,28 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+
+      <!-- Load Mockito as a Java agent instead of letting it self-attach at runtime:
+           Mockito's documented setup for JDK 21+, and required inside the Claude Code sandbox,
+           where the JVM attach mechanism can't use /tmp. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>properties</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
+        </configuration>
       </plugin>
 
       <!-- Formatting gate: `spotless:check` runs in verify, the PostToolUse hook runs `spotless:apply`. -->

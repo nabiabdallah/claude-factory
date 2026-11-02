@@ -37,6 +37,12 @@ host="${rest%:*}"; port="${rest##*:}"
 
 xml_escape() { local s="$1"; s="${s//&/&amp;}"; s="${s//</&lt;}"; s="${s//>/&gt;}"; printf '%s' "$s"; }
 
+# /tmp is read-only in the sandbox. Point every JVM Maven forks (e.g. surefire) at the sandbox's
+# writable temp dir; Mockito's inline mock maker writes a jar there.
+if [[ -n "${TMPDIR:-}" && -w "$TMPDIR" ]]; then
+  export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Djava.io.tmpdir=$TMPDIR"
+fi
+
 umask 077
 settings="$(mktemp "${TMPDIR:-/tmp}/mvnw-sandboxed.XXXXXX.xml")"
 trap 'rm -f "$settings"' EXIT
