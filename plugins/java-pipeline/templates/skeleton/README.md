@@ -1,0 +1,41 @@
+# app-skeleton
+
+A Spring Boot 3.5 / Java 21 hexagonal service, created by `/java-pipeline:new-project`.
+It starts empty: layer packages, an `ErrorHandler`, architecture rules and CI, no business code.
+The agentic pipeline — **spec → plan → architect review → failing tests → implementation →
+`./mvnw verify` gate → code review** — comes from the `java-pipeline` plugin; this repo holds only
+code, docs and project permissions.
+
+## First run
+
+```bash
+./mvnw verify      # must be green before you hand anything to an agent
+claude             # accept the workspace-trust prompt and the plugin install prompt
+```
+
+Check the plugin loaded: `claude plugin details java-pipeline` (skills, agents, hooks), and in a
+session `/hooks` (PostToolUse + Stop from the plugin) and `/plugin` (java-pipeline enabled). Then
+start your first feature:
+
+```
+/java-pipeline:new-feature <what you want to build>. Write the spec first.
+```
+
+Requires `jq` on your PATH (the plugin hooks parse their JSON input with it).
+
+## What's here
+
+| Path | Role |
+|---|---|
+| `CLAUDE.md` | Always-loaded context: commands, architecture, rules. Keep it short. |
+| `.claude/settings.json` | Permissions (allow Maven/git, ask before push, deny `.env` and edits to `ArchitectureTest`) and enablement of `java-pipeline@claude-factory`. |
+| `src/main/java/.../adapter/in/web/ErrorHandler.java` | RFC 9457 problem responses; 404/422 for domain errors, generic 500 with an `errorId`. |
+| `src/test/.../ArchitectureTest.java` | The architecture as build-breaking rules. |
+| `src/test/.../ApplicationContextTest.java` | Boots the full Spring context. |
+| `docs/specs/` | Specs with numbered acceptance criteria — the agents' source of truth. |
+| `docs/adr/` | Architecture decisions. |
+| `.github/workflows/ci.yml` | CI: JDK 21, `./mvnw verify`. |
+
+## Evolving it
+- Add a rule to `ArchitectureTest` every time a review catches the same structural mistake twice.
+- Pipeline changes (agents, skills, hooks) belong in the `claude-factory` repo, not here.

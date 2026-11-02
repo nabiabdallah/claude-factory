@@ -14,12 +14,14 @@ claude-factory/
 │   ├── skills/                          new-feature, write-adr, new-project (+ scripts/)
 │   ├── hooks/                           hooks.json, format-java.sh, verify-gate.sh
 │   ├── bin/mvnw-sandboxed               ./mvnw + sandbox proxy (on PATH while enabled)
-│   └── templates/spring-service/        what /java-pipeline:new-project copies
+│   └── templates/                       what /java-pipeline:new-project copies
+│       ├── skeleton/                    default: empty hexagonal service
+│       └── payments-example/            the original payments starter, as a worked example
 ├── docs/factory-adr/                    decisions about the factory itself
 └── README.md
 ```
 
-The template sits inside the plugin because only the plugin directory is copied into the
+Templates sit inside the plugin because only the plugin directory is copied into the
 plugin cache on install (see `docs/factory-adr/0001-pipeline-as-plugin.md`).
 
 ## Install
@@ -42,9 +44,10 @@ own `.claude/settings.json`, so opening the project prompts to install it if it'
 ## Use
 
 ```
-/java-pipeline:new-project payments-service com.example.payments
-cd ~/dev/projects/payments-service && claude
-/java-pipeline:new-feature Add GET /accounts/{id}/balance. Write the spec first.
+/java-pipeline:new-project customer-service com.example.customers                 # skeleton
+/java-pipeline:new-project ledger-demo com.example.ledger --template payments-example
+cd ~/dev/projects/customer-service && claude
+/java-pipeline:new-feature Add GET /customers/{id}. Write the spec first.
 ```
 
 Agents are available as `java-pipeline:architect-reviewer`, `java-pipeline:test-writer` and

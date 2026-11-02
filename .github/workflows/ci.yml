@@ -26,14 +26,22 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Verify the spring-service template
-        working-directory: plugins/java-pipeline/templates/spring-service
+      - name: Verify the skeleton template
+        working-directory: plugins/java-pipeline/templates/skeleton
         run: ./mvnw -B verify
 
-      - name: Smoke-test new-project (template package and a different one)
+      - name: Verify the payments-example template
+        working-directory: plugins/java-pipeline/templates/payments-example
+        run: ./mvnw -B verify
+
+      - name: Smoke-test new-project (both templates, same/nested/different packages)
         run: |
           git config --global user.name "CI"
           git config --global user.email "ci@users.noreply.github.com"
           script=plugins/java-pipeline/skills/new-project/scripts/new-project.sh
-          "$script" ci-same com.example.payments "$RUNNER_TEMP/projects"
-          "$script" ci-other com.acme.ledger.core "$RUNNER_TEMP/projects"
+          out="$RUNNER_TEMP/projects"
+          "$script" --list
+          "$script" ci-skeleton com.acme.customers "$out"
+          "$script" ci-skeleton-nested com.example.app.core "$out"
+          "$script" --template payments-example ci-payments-same com.example.payments "$out"
+          "$script" --template payments-example ci-payments-other com.acme.ledger.core "$out"
