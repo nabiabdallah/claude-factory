@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  template:
+    name: Template builds and new-project works
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify the spring-service template
+        working-directory: plugins/java-pipeline/templates/spring-service
+        run: ./mvnw -B verify
+
+      - name: Smoke-test new-project (template package and a different one)
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@users.noreply.github.com"
+          script=plugins/java-pipeline/skills/new-project/scripts/new-project.sh
+          "$script" ci-same com.example.payments "$RUNNER_TEMP/projects"
+          "$script" ci-other com.acme.ledger.core "$RUNNER_TEMP/projects"
