@@ -26,6 +26,9 @@ group_id="${pkg%.*}"
 
 mkdir -p "$dest_root"
 cp -r "$template" "$dest"
+# Until the build runs, any failure removes the partial copy so a rerun isn't blocked.
+cleanup_partial=1
+trap '[[ $? -ne 0 && ${cleanup_partial:-0} -eq 1 ]] && rm -rf "$dest" && echo "new-project: removed partial copy $dest" >&2' EXIT
 cd "$dest"
 
 # Move source trees to the new package path.
@@ -55,7 +58,9 @@ sed -i \
   -e "s/<name>payments-starter<\/name>/<name>${name}<\/name>/" \
   pom.xml
 
-if grep -rIq --exclude-dir=.git --exclude-dir=target "$old_re" .; then
+# Leftover check only makes sense when the new package doesn't itself contain the old name
+# (same package, or nested like com.example.payments.core, would always match).
+if [[ "$pkg" != *"$old_pkg"* ]] && grep -rIq --exclude-dir=.git --exclude-dir=target "$old_re" .; then
   die "leftover references to $old_pkg after rename"
 fi
 
@@ -65,7 +70,10 @@ if [[ -z "${JAVA_HOME:-}" ]] && ! command -v java >/dev/null 2>&1 && [[ -s "$HOM
 fi
 
 chmod +x mvnw
+cleanup_partial=0   # from here on, keep the directory so a failed build can be inspected
 git init -q
+# Longer package names change line lengths; re-format once so spotless:check in verify passes.
+"$script_dir/../../../bin/mvnw-sandboxed" -q -B spotless:apply || die "spotless:apply failed in $dest"
 "$script_dir/../../../bin/mvnw-sandboxed" -q -B verify || die "./mvnw verify failed in $dest — project left in place, not committed"
 git add -A
 git commit -q -m "chore: create ${name} from java-pipeline spring-service template"
