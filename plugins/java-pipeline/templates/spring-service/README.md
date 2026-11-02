@@ -12,7 +12,8 @@ holds only code, docs and project permissions.
 claude             # accept the workspace-trust prompt and the plugin install prompt
 ```
 
-In Claude Code, check the plugin loaded: `/agents` (3 `java-pipeline:*` agents), `/hooks`
+Check the plugin loaded: `claude plugin details java-pipeline` (3 skills, 3 agents, 2 hooks;
+`/agents` no longer lists agents as of Claude Code 2.1.316), and in a session `/hooks`
 (PostToolUse + Stop from the plugin), `/plugin` (java-pipeline enabled). Then:
 
 ```
