@@ -4,6 +4,7 @@
     "allow": [
       "Bash(mvn *)",
       "Bash(./mvnw *)",
+      "Bash(mvnw-sandboxed *)",
       "Bash(git status)",
       "Bash(git diff *)",
       "Bash(git log *)",

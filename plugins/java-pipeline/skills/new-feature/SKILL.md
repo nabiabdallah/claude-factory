@@ -29,14 +29,14 @@ Follow these stages in order. Do not skip a stage; stop and ask the user if one 
 ## 4. Green
 - Implement the smallest code that makes the tests pass, layer by layer:
   domain → ports → service → adapters → config wiring.
-- Run `./mvnw -q test` after each layer.
+- Run `mvnw-sandboxed -q test` after each layer.
 
 ## 5. Verify
-- Run `./mvnw -q verify` (tests + ArchUnit + formatting). Fix the cause of any failure;
+- Run `mvnw-sandboxed -q verify` (tests + ArchUnit + formatting). Fix the cause of any failure;
   never edit `ArchitectureTest` or delete a test to go green.
 
 ## 6. Review
-- Delegate to the `java-pipeline:code-reviewer` agent. Fix every MUST FIX item, then re-run `./mvnw -q verify`.
+- Delegate to the `java-pipeline:code-reviewer` agent. Fix every MUST FIX item, then re-run `mvnw-sandboxed -q verify`.
 
 ## 7. Hand-off
 - Commit on a feature branch with a message referencing the spec.

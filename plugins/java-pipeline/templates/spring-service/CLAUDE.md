@@ -4,10 +4,10 @@ Spring Boot service, Java 21, Maven wrapper. Hexagonal (ports & adapters) archit
 Pipeline (agents, skills, hooks) comes from the `java-pipeline` plugin — not from this repo's `.claude/`.
 
 ## Commands
-- Build + all gates: `./mvnw -q verify`
-- Unit tests only: `./mvnw -q test`
-- One test class: `./mvnw -q test -Dtest=TransferMoneyServiceTest`
-- Format: `./mvnw -q spotless:apply`
+- Build + all gates: `mvnw-sandboxed -q verify` (plugin helper: `./mvnw` + sandbox proxy; same args)
+- Unit tests only: `mvnw-sandboxed -q test`
+- One test class: `mvnw-sandboxed -q test -Dtest=TransferMoneyServiceTest`
+- Format: `mvnw-sandboxed -q spotless:apply`
 - Run: `./mvnw spring-boot:run`
 
 ## Architecture (enforced by `ArchitectureTest` — the build fails if you break it)

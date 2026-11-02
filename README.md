@@ -13,6 +13,7 @@ claude-factory/
 │   ├── agents/                          architect-reviewer, test-writer, code-reviewer
 │   ├── skills/                          new-feature, write-adr, new-project (+ scripts/)
 │   ├── hooks/                           hooks.json, format-java.sh, verify-gate.sh
+│   ├── bin/mvnw-sandboxed               ./mvnw + sandbox proxy (on PATH while enabled)
 │   └── templates/spring-service/        what /java-pipeline:new-project copies
 ├── docs/factory-adr/                    decisions about the factory itself
 └── README.md

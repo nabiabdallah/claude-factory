@@ -66,7 +66,7 @@ fi
 
 chmod +x mvnw
 git init -q
-./mvnw -q -B verify || die "./mvnw verify failed in $dest — project left in place, not committed"
+"$script_dir/../../../bin/mvnw-sandboxed" -q -B verify || die "./mvnw verify failed in $dest — project left in place, not committed"
 git add -A
 git commit -q -m "chore: create ${name} from java-pipeline spring-service template"
 

@@ -17,7 +17,7 @@ Process:
 5. Cover the unhappy paths a bank cares about: insufficient funds, currency mismatch,
    duplicate idempotency key, unknown account, zero/negative amounts.
 6. Use AssertJ. No `Thread.sleep`. No test depending on another test's state.
-7. Run `mvn -q test` and confirm the new tests FAIL for the right reason
+7. Run `mvnw-sandboxed -q test` and confirm the new tests FAIL for the right reason
    (missing behaviour, not a compile error in unrelated code).
 
 Report back: the list of test methods, each mapped to the acceptance criterion it covers,

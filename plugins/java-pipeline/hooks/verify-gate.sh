@@ -27,6 +27,7 @@ if [[ -z "${JAVA_HOME:-}" ]] && ! command -v java >/dev/null 2>&1 && [[ -s "$HOM
   set +u; source "$HOME/.sdkman/bin/sdkman-init.sh"; set -u
 fi
 mvn_cmd="mvn"; [[ -x ./mvnw ]] && mvn_cmd="./mvnw"
+[[ -x "${CLAUDE_PLUGIN_ROOT:-}/bin/mvnw-sandboxed" ]] && mvn_cmd="${CLAUDE_PLUGIN_ROOT}/bin/mvnw-sandboxed"
 
 if out="$($mvn_cmd -q verify 2>&1)"; then
   rm -f "$state_file"

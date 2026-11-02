@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Fresh-eyes review of the current diff before it becomes a PR — correctness, security, banking-grade error handling, logging/PII. Use proactively after implementation passes `mvn verify`.
+description: Fresh-eyes review of the current diff before it becomes a PR — correctness, security, banking-grade error handling, logging/PII. Use proactively after implementation passes `mvnw-sandboxed verify`.
 tools: Read, Grep, Glob, Bash
 model: opus
 ---

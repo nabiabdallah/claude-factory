@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# mvnw-sandboxed: run the project's Maven wrapper so it works inside the Claude Code sandbox.
+#
+# The sandbox routes network traffic through a local authenticated proxy announced in
+# $HTTPS_PROXY. Maven ignores proxy environment variables, so without help it can't
+# download new dependencies. When such a proxy is present, this script writes a throwaway
+# global settings file (owner-only, deleted on exit) declaring it, and passes it with -gs.
+# Outside the sandbox (no proxy variable) it runs ./mvnw unchanged.
+#
+# Usage: mvnw-sandboxed <maven args>      e.g. mvnw-sandboxed -q verify
+set -uo pipefail
+
+# Find Java if the session was started without it (e.g. SDKMAN installed later).
+if [[ -z "${JAVA_HOME:-}" ]] && ! command -v java >/dev/null 2>&1 && [[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]]; then
+  set +u; source "$HOME/.sdkman/bin/sdkman-init.sh"; set -u
+fi
+
+if [[ -x ./mvnw ]]; then mvn_cmd=./mvnw
+elif command -v mvn >/dev/null 2>&1; then mvn_cmd=mvn
+else echo "mvnw-sandboxed: no ./mvnw in $(pwd) and no mvn on PATH" >&2; exit 127
+fi
+
+proxy="${HTTPS_PROXY:-${https_proxy:-}}"
+if [[ -z "$proxy" ]]; then
+  exec "$mvn_cmd" "$@"
+fi
+
+# Parse http://[user:pass@]host:port[/]
+rest="${proxy#*://}"; rest="${rest%%/*}"
+user=""; pass=""
+if [[ "$rest" == *@* ]]; then
+  creds="${rest%@*}"; rest="${rest##*@}"
+  user="${creds%%:*}"; pass="${creds#*:}"
+fi
+host="${rest%:*}"; port="${rest##*:}"
+[[ "$port" =~ ^[0-9]+$ ]] || { echo "mvnw-sandboxed: can't parse proxy port from \$HTTPS_PROXY" >&2; exit 2; }
+
+xml_escape() { local s="$1"; s="${s//&/&amp;}"; s="${s//</&lt;}"; s="${s//>/&gt;}"; printf '%s' "$s"; }
+
+umask 077
+settings="$(mktemp "${TMPDIR:-/tmp}/mvnw-sandboxed.XXXXXX.xml")"
+trap 'rm -f "$settings"' EXIT
+
+{
+  echo '<settings><proxies>'
+  for proto in https http; do
+    echo " <proxy><id>sandbox-$proto</id><active>true</active><protocol>$proto</protocol>"
+    echo "  <host>$(xml_escape "$host")</host><port>$port</port>"
+    [[ -n "$user" ]] && echo "  <username>$(xml_escape "$user")</username><password>$(xml_escape "$pass")</password>"
+    echo "  <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts></proxy>"
+  done
+  echo '</proxies></settings>'
+} > "$settings"
+
+"$mvn_cmd" -gs "$settings" "$@"
