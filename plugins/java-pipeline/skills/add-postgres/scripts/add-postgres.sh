@@ -45,6 +45,9 @@ targets=(
 for t in "${targets[@]}"; do
   [[ ! -e "$t" ]] || die "$t already exists; refusing to overwrite"
 done
+# The readiness test needs Actuator (templates from java-pipeline 0.7.0 on have it).
+readiness_test="src/test/java/$pkg_path/support/PostgresReadinessTest.java"
+[[ ! -e "$readiness_test" ]] || die "$readiness_test already exists; refusing to overwrite"
 if grep -qs '^spring.datasource.url' src/main/resources/application.properties; then
   die "src/main/resources/application.properties already sets spring.datasource.url"
 fi
@@ -65,6 +68,9 @@ put test/resources/META-INF/spring.factories "${targets[7]}"
 put compose.yaml "${targets[8]}"
 put test/support/DbLocks.java "${targets[9]}"
 put test/support/DbLocksTest.java "${targets[10]}"
+if grep -q '<artifactId>spring-boot-starter-actuator</artifactId>' pom.xml; then
+  put test/support/PostgresReadinessTest.java "$readiness_test"
+fi
 
 mkdir -p src/main/resources
 props_tmp="$(mktemp "${TMPDIR:-/tmp}/add-postgres.XXXXXX")"

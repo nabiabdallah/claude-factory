@@ -27,6 +27,14 @@ start your first feature:
 
 Requires `jq` on your PATH (the plugin hooks parse their JSON input with it).
 
+## Runtime
+
+- Health for Kubernetes: `/actuator/health/liveness` and `/actuator/health/readiness`; no other Actuator
+  endpoint is exposed and health shows no details.
+- Logs are ECS JSON by default; run locally with plain text:
+  `./mvnw spring-boot:run -Dspring-boot.run.profiles=local`.
+- Graceful shutdown: in-flight requests get up to 20s when the pod stops.
+
 ## What's here
 
 | Path | Role |

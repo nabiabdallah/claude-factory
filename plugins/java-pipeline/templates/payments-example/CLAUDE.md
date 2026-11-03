@@ -8,7 +8,8 @@ Pipeline (agents, skills, hooks) comes from the `java-pipeline` plugin — not f
 - Unit tests only: `mvnw-sandboxed -q test`
 - One test class: `mvnw-sandboxed -q test -Dtest=TransferMoneyServiceTest`
 - Format: `mvnw-sandboxed -q spotless:apply`
-- Run: `./mvnw spring-boot:run`
+- Run locally: `./mvnw spring-boot:run -Dspring-boot.run.profiles=local` (plain-text logs; default is ECS JSON)
+- Health: `/actuator/health/liveness`, `/actuator/health/readiness` (only health is exposed)
 
 ## Architecture (enforced by `ArchitectureTest` — the build fails if you break it)
 ```
