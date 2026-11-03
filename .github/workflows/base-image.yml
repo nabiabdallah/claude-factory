@@ -1,0 +1,59 @@
+name: Base image digest
+
+# The service base image is pinned to a digest in factory-parent (ADR 0009). Distroless republishes
+# the tag for security fixes, and Dependabot can't update a digest in a pom property, so this job
+# checks weekly and opens a PR when the digest changed. Release it like any factory-parent change
+# (bump the version, tag factory-parent-v*); services get it through their Dependabot bump.
+on:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Compare the pinned digest with the registry
+        id: digest
+        run: |
+          pom=parents/factory-parent/pom.xml
+          base=$(sed -n 's|.*<factory.image.base>\(.*\)</factory.image.base>.*|\1|p' "$pom")
+          name="${base%@*}"            # gcr.io/distroless/java21-debian12:nonroot
+          repo="${name%:*}"; tag="${name##*:}"
+          registry="${repo%%/*}"; path="${repo#*/}"
+          latest=$(curl -sSfI --retry 3 \
+            -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json' \
+            "https://$registry/v2/$path/manifests/$tag" | tr -d '\r' | sed -n 's/^docker-content-digest: //Ip')
+          [[ "$latest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no digest from $registry: '$latest'"; exit 1; }
+          echo "pinned: ${base#*@}"; echo "latest: $latest"
+          if [[ "${base#*@}" != "$latest" ]]; then
+            sed -i "s|<factory.image.base>$name@sha256:[0-9a-f]*</factory.image.base>|<factory.image.base>$name@$latest</factory.image.base>|" "$pom"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open a PR
+        if: steps.digest.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST: ${{ steps.digest.outputs.latest }}
+        run: |
+          branch="deps/base-image-${LATEST:7:12}"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "PR branch $branch already exists"; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "build(factory-parent): base image digest ${LATEST:0:19}"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "build(factory-parent): new distroless base image digest" \
+            --body "Distroless published a new digest for the pinned tag (usually security fixes). PRs opened by Actions with GITHUB_TOKEN don't start CI: close and reopen this PR to run the build and image scan. To release after merging: bump the factory-parent version and tag factory-parent-v<version>."
