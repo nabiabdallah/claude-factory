@@ -11,6 +11,8 @@ Pipeline (agents, skills, hooks) comes from the `java-pipeline` plugin — not f
 - Run locally: `./mvnw spring-boot:run -Dspring-boot.run.profiles=local` (plain-text logs; default is ECS JSON)
 - Health: `/actuator/health/liveness`, `/actuator/health/readiness` (only health is exposed)
 
+- Image: built and pushed by CI on `main` only (Jib); don't add a Dockerfile. Manifests: `deploy/k8s/`.
+
 ## Architecture (enforced by `ArchitectureTest` — the build fails if you break it)
 ```
 com.example.app

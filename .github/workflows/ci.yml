@@ -38,6 +38,12 @@ jobs:
         working-directory: plugins/java-pipeline/templates/payments-example
         run: ./mvnw -B verify
 
+      - name: Build the skeleton image to a tarball (Jib config, no push)
+        working-directory: plugins/java-pipeline/templates/skeleton
+        run: |
+          ./mvnw -B -q -DskipTests package jib:buildTar
+          ls -l target/jib-image.tar
+
       - name: Smoke-test new-project (both templates, same/nested/different packages)
         run: |
           git config --global user.name "CI"
@@ -55,3 +61,29 @@ jobs:
           out="$RUNNER_TEMP/projects"
           (cd "$out/ci-skeleton" && "$GITHUB_WORKSPACE/plugins/java-pipeline/skills/add-postgres/scripts/add-postgres.sh")
           (cd "$out/ci-payments-other" && "$GITHUB_WORKSPACE/plugins/java-pipeline/skills/add-postgres/scripts/add-postgres.sh")
+
+  manifests:
+    name: Kubernetes manifests render and match the schemas
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install kubeconform (checksum-verified)
+        run: |
+          v=v0.6.7
+          base=https://github.com/yannh/kubeconform/releases/download/$v
+          curl -sSLO "$base/kubeconform-linux-amd64.tar.gz"
+          curl -sSLO "$base/CHECKSUMS"
+          grep ' kubeconform-linux-amd64.tar.gz$' CHECKSUMS | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf kubeconform-linux-amd64.tar.gz -C "$RUNNER_TEMP/bin" kubeconform
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Render (kustomize) and validate (kubeconform -strict)
+        run: |
+          for t in skeleton payments-example; do
+            echo "== $t"
+            kubectl kustomize "plugins/java-pipeline/templates/$t/deploy/k8s" \
+              | kubeconform -strict -summary -kubernetes-version 1.31.0 -
+          done

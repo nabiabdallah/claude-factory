@@ -34,6 +34,19 @@ Requires `jq` on your PATH (the plugin hooks parse their JSON input with it).
   `./mvnw spring-boot:run -Dspring-boot.run.profiles=local`.
 - Graceful shutdown: in-flight requests get up to 20s when the pod stops.
 
+## Image and deployment
+
+- CI pushes `ghcr.io/nabiabdallah/<service>:<sha>` and `:main` on every push to `main` (Jib, distroless,
+  non-root; no Docker needed). PRs only run `verify`.
+- `deploy/k8s/` is a Kustomize base (Deployment + Service, probes, hardened security context). Create the
+  database Secret once, then deploy:
+  ```bash
+  kubectl create secret generic <service>-db --from-literal=DB_URL=... --from-literal=DB_USERNAME=... --from-literal=DB_PASSWORD=...
+  kubectl apply -k deploy/k8s
+  ```
+  Set the image tag in `deploy/k8s/kustomization.yaml` (`newTag`).
+- Build the image locally without pushing (needs network to gcr.io): `./mvnw -DskipTests package jib:buildTar`.
+
 ## What's here
 
 | Path | Role |

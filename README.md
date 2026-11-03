@@ -81,6 +81,13 @@ this repo (see `docs/factory-adr/0003-shared-parent-pom-on-github-packages.md`).
 `publish-parent.yml` checks the tag matches the pom and deploys. Services pick it up by bumping their
 parent version.
 
+## Images and Kubernetes
+
+Services build their image with Jib (configured in `factory-parent` 1.2.0+: distroless, non-root) and CI
+pushes `ghcr.io/nabiabdallah/<service>:<sha>` and `:main` on pushes to `main`. Each service has a Kustomize
+base in `deploy/k8s/`. Factory CI validates the templates' manifests with kubeconform and builds the
+skeleton image with `jib:buildTar` (ADR 0007).
+
 ## Dependency updates (Dependabot)
 
 Every repo has `.github/dependabot.yml` (the templates carry it to new services): weekly PRs, minor/patch

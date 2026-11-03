@@ -35,3 +35,34 @@ jobs:
         run: ./mvnw -B verify
         env:
           FACTORY_PACKAGES_TOKEN: ${{ secrets.FACTORY_PACKAGES_TOKEN }}
+
+  # Container image (claude-factory ADR 0007): only for pushes to main, after verify passed.
+  # Jib builds without a Docker daemon and pushes with this repo's own token.
+  image:
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username-env-var: GITHUB_ACTOR
+          server-password-env-var: FACTORY_PACKAGES_TOKEN
+
+      - name: Build and push ghcr.io image (tags <sha>, main)
+        run: >
+          ./mvnw -B -DskipTests package jib:build
+          -Djib.to.tags=${{ github.sha }},main
+          -Djib.to.auth.username=${{ github.actor }}
+          -Djib.to.auth.password=${{ github.token }}
+        env:
+          FACTORY_PACKAGES_TOKEN: ${{ secrets.FACTORY_PACKAGES_TOKEN }}

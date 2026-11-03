@@ -1,7 +1,7 @@
 {
   "name": "java-pipeline",
   "displayName": "Java Pipeline",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Agentic pipeline for Java 21 / Spring Boot hexagonal services: architect, test-writer and code-reviewer agents; new-feature, write-adr and new-project skills; format and verify-gate hooks",
   "author": {
     "name": "Noel Abi Abdallah"
