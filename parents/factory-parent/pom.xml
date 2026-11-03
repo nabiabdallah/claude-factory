@@ -18,7 +18,7 @@
 
   <groupId>io.github.nabiabdallah.factory</groupId>
   <artifactId>factory-parent</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
   <packaging>pom</packaging>
   <name>factory-parent</name>
   <description>Shared Maven build for services created by the claude-factory java-pipeline</description>
@@ -27,6 +27,9 @@
     <java.version>21</java.version>
     <archunit.version>1.5.1</archunit.version>
     <spotless.version>3.10.4</spotless.version>
+    <!-- Real Postgres for tests, no Docker (works inside the Claude Code sandbox): add-postgres skill. -->
+    <embedded-postgres.version>2.2.2</embedded-postgres.version>
+    <embedded-postgres-binaries.version>18.6.0</embedded-postgres-binaries.version>
     <!-- Defined empty so @{argLine} resolves when no other plugin (e.g. JaCoCo) sets it. -->
     <argLine></argLine>
   </properties>
@@ -37,6 +40,18 @@
         <groupId>com.tngtech.archunit</groupId>
         <artifactId>archunit-junit5</artifactId>
         <version>${archunit.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.zonky.test</groupId>
+        <artifactId>embedded-postgres</artifactId>
+        <version>${embedded-postgres.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.zonky.test.postgres</groupId>
+        <artifactId>embedded-postgres-binaries-bom</artifactId>
+        <version>${embedded-postgres-binaries.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>

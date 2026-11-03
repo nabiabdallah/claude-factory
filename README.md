@@ -11,7 +11,7 @@ claude-factory/
 ├── plugins/java-pipeline/
 │   ├── .claude-plugin/plugin.json       plugin manifest (version lives here)
 │   ├── agents/                          architect-reviewer, test-writer, code-reviewer
-│   ├── skills/                          new-feature, write-adr, new-project (+ scripts/)
+│   ├── skills/                          new-feature, write-adr, new-project, add-postgres (+ scripts/)
 │   ├── hooks/                           hooks.json, format-java.sh, verify-gate.sh
 │   ├── bin/mvnw-sandboxed               ./mvnw + sandbox proxy (on PATH while enabled)
 │   └── templates/                       what /java-pipeline:new-project copies
@@ -48,6 +48,7 @@ own `.claude/settings.json`, so opening the project prompts to install it if it'
 /java-pipeline:new-project customer-service com.example.customers                 # skeleton
 /java-pipeline:new-project ledger-demo com.example.ledger --template payments-example
 cd ~/dev/projects/customer-service && claude
+/java-pipeline:add-postgres                     # optional: Postgres, Flyway, embedded-Postgres tests
 /java-pipeline:new-feature Add GET /customers/{id}. Write the spec first.
 ```
 

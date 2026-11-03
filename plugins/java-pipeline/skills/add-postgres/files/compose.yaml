@@ -1,0 +1,18 @@
+# Local Postgres for `./mvnw spring-boot:run`. Tests don't need it: they use an embedded Postgres.
+# Needs Docker Desktop with WSL integration. Run it yourself, outside the Claude Code sandbox:
+#   docker compose up -d
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: __DB__
+      POSTGRES_USER: __DB__
+      # No password, local only: the port is published on 127.0.0.1 alone.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+volumes:
+  pgdata:

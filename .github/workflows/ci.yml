@@ -49,3 +49,9 @@ jobs:
           "$script" ci-skeleton-nested com.example.app.core "$out"
           "$script" --template payments-example ci-payments-same com.example.payments "$out"
           "$script" --template payments-example ci-payments-other com.acme.ledger.core "$out"
+
+      - name: Smoke-test add-postgres (embedded Postgres, Flyway, transactions)
+        run: |
+          out="$RUNNER_TEMP/projects"
+          (cd "$out/ci-skeleton" && "$GITHUB_WORKSPACE/plugins/java-pipeline/skills/add-postgres/scripts/add-postgres.sh")
+          (cd "$out/ci-payments-other" && "$GITHUB_WORKSPACE/plugins/java-pipeline/skills/add-postgres/scripts/add-postgres.sh")

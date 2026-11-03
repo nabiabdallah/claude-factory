@@ -62,6 +62,15 @@ class ArchitectureTest {
             .resideInAPackage("com.example.payments.adapter.in..");
 
     @ArchTest
+    static final ArchRule sql_only_in_persistence_adapters_and_config = noClasses()
+            .that()
+            .resideOutsideOfPackages("com.example.payments.adapter.out.persistence..", "com.example.payments.config..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("java.sql..", "javax.sql..", "org.springframework.jdbc..", "org.flywaydb..")
+            .because("SQL, connections and migrations stay behind outbound persistence adapters");
+
+    @ArchTest
     static final ArchRule adapters_are_independent = slices().matching("com.example.payments.adapter.(*).(*)..")
             .should()
             .notDependOnEachOther()

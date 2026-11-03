@@ -1,0 +1,2 @@
+# Every Spring test context uses the embedded Postgres (no Docker, works inside the Claude Code sandbox).
+org.springframework.context.ApplicationContextInitializer=__PKG__.support.EmbeddedPostgresInitializer
