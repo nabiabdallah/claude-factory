@@ -26,6 +26,7 @@ pkg="$(sed -n 's/^package \([a-z0-9_.]*\);.*/\1/p' "$app" | head -n 1)"
 name="$(sed -n 's|^  <artifactId>\(.*\)</artifactId>$|\1|p' pom.xml | head -n 1)"
 [[ -n "$name" ]] || die "could not read the project artifactId from pom.xml"
 pkg_path="${pkg//.//}"
+app_class="$(basename "$app" .java)"
 
 targets=(
   "src/main/java/$pkg_path/config/SecurityConfig.java"
@@ -33,6 +34,9 @@ targets=(
   "src/test/java/$pkg_path/support/TestTokens.java"
   "src/test/java/$pkg_path/support/SecurityProbeController.java"
   "src/test/java/$pkg_path/support/SecurityTest.java"
+  "src/test/java/$pkg_path/support/IsolatedBootLogging.java"
+  "src/test/java/$pkg_path/support/StartupGuardsTest.java"
+  "src/test/java/$pkg_path/support/IdentityProviderTimeoutTest.java"
 )
 for t in "${targets[@]}"; do
   [[ ! -e "$t" ]] || die "$t already exists; refusing to overwrite"
@@ -43,7 +47,7 @@ fi
 
 put() { # put <file under files/> <destination>
   mkdir -p "$(dirname "$2")"
-  sed -e "s/__PKG__/${pkg}/g" -e "s/__SVC__/${name}/g" "$files/$1" > "$2"
+  sed -e "s/__PKG__/${pkg}/g" -e "s/__SVC__/${name}/g" -e "s/__APP__/${app_class}/g" "$files/$1" > "$2"
 }
 
 put main/config/SecurityConfig.java "${targets[0]}"
@@ -51,6 +55,49 @@ put test/support/TestJwtInitializer.java "${targets[1]}"
 put test/support/TestTokens.java "${targets[2]}"
 put test/support/SecurityProbeController.java "${targets[3]}"
 put test/support/SecurityTest.java "${targets[4]}"
+put test/support/IsolatedBootLogging.java "${targets[5]}"
+put test/support/StartupGuardsTest.java "${targets[6]}"
+put test/support/IdentityProviderTimeoutTest.java "${targets[7]}"
+
+# The templates' ActuatorEndpointsTest expects 404 for unexposed endpoints without a token; behind the resource
+# server that request is a 401 first. Rewrite it into two exact cases (token → 404 proves "not exposed";
+# no token → 401), never "401 or 404" (which would hide a regression to exposure.include=*).
+actuator_test="src/test/java/$pkg_path/runtime/ActuatorEndpointsTest.java"
+actuator_note=""
+if [[ -f "$actuator_test" ]]; then
+  if ! python3 -I - "$actuator_test" "$name" <<'PYA'
+import sys
+path, svc = sys.argv[1], sys.argv[2]
+s = open(path).read()
+old = """        mvc.perform(get(endpoint))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(not(containsString("propertySources"))));
+    }"""
+if old not in s:
+    sys.exit(1)
+new = """        // With a valid token: exactly 404 proves the endpoint is not exposed.
+        mvc.perform(get(endpoint).header("Authorization", TestTokens.withScopes("%s:read")))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(not(containsString("propertySources"))));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/actuator/env", "/actuator/beans", "/actuator/metrics", "/actuator/configprops"})
+    void other_actuator_endpoints_need_a_token(String endpoint) throws Exception {
+        mvc.perform(get(endpoint))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().string(not(containsString("propertySources"))));
+    }""" % svc
+s = s.replace(old, new, 1)
+pkg_line = s.splitlines()[0]
+base = pkg_line.removeprefix("package ").removesuffix(";").rsplit(".runtime", 1)[0]
+s = s.replace("import org.junit.jupiter.api.Test;", "import " + base + ".support.TestTokens;\nimport org.junit.jupiter.api.Test;", 1)
+open(path, "w").write(s)
+PYA
+  then
+    actuator_note="add-resource-server: $actuator_test doesn't match the template; make 'other_actuator_endpoints_are_not_exposed' send TestTokens.withScopes(\"${name}:read\") (expect 404) and add a tokenless case expecting 401."
+  fi
+fi
 
 mkdir -p src/main/resources
 props_tmp="$(mktemp "${TMPDIR:-/tmp}/add-resource-server.XXXXXX")"
@@ -114,6 +161,7 @@ if ! "$helper" -q -B verify; then
   cat >&2 <<EOT
 add-resource-server: ./mvnw verify failed; changes left in place (not committed).
 add-resource-server: expected for an existing service: endpoint tests that call without a token now get 401.
+${actuator_note}
 add-resource-server: send TestTokens.withScopes("${name}:read" / "${name}:write") in those tests (see CLAUDE.md).
 EOT
   exit 1
@@ -121,3 +169,6 @@ fi
 
 echo "add-resource-server: ${name} is now an OAuth2 resource server (scopes ${name}:read / ${name}:write); ./mvnw verify green. Nothing committed."
 echo "add-resource-server: ADR ${adr}. Production needs AUTH_ISSUER_URI (and AUTH_AUDIENCE if not '${name}')."
+if [[ -n "$actuator_note" ]]; then
+  echo "$actuator_note"
+fi

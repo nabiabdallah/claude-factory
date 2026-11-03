@@ -23,6 +23,20 @@ template default.
 - Templates' Actuator test accepts exactly 401 or 404 for unexposed endpoints (the security filter answers
   first), rather than opening `/actuator/**`.
 
+## Amendment (0.9.1, from the payments-service spec 0004 reviews)
+- **Blank audience fails open in Spring Boot** (an empty `audiences` list adds no audience check; the
+  `${AUTH_AUDIENCE:default}` default doesn't apply to an empty value): the generated `SecurityConfig` now refuses
+  to start with a blank audience.
+- **No timeouts on issuer calls** by default: `SecurityConfig` adds 3s connect/read timeouts for discovery and
+  JWKS, so a stalled issuer gives a fast 401 instead of hanging threads.
+- **HEAD** needs the read scope like GET (under the write rule it leaked account existence to write-only callers).
+- New generic tests: `StartupGuardsTest` (no/blank issuer, blank audience), `IdentityProviderTimeoutTest` (stand-in
+  issuer stalls → 401 within 10s, health 200); `TestJwtInitializer` gains `stall()`/`resume()` and daemon threads.
+- The templates' `ActuatorEndpointsTest` is an exact 404 again; the skill rewrites it into exact "with a token → 404"
+  and "without → 401" cases (the former "401 or 404" hid a regression to `exposure.include=*`).
+- The templates' `StructuredLoggingTest` re-runs Boot's logging initialization from its own context, so it no longer
+  depends on test order; tests that start apps themselves use `IsolatedBootLogging`.
+
 ## Alternatives considered
 - **Auth in the skeleton by default** — every new app secure from day one, but tests and local runs need an
   issuer from the start and existing services still need the migration; kept as an explicit step.

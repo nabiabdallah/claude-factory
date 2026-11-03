@@ -1,6 +1,5 @@
 package com.example.payments.runtime;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -44,11 +43,10 @@ class ActuatorEndpointsTest {
     @ParameterizedTest
     @ValueSource(strings = {"/actuator/env", "/actuator/beans", "/actuator/metrics", "/actuator/configprops"})
     void other_actuator_endpoints_are_not_exposed(String endpoint) throws Exception {
-        // 404 when nothing guards /actuator; 401 once the service is a resource server (the security filter
-        // answers before the endpoint lookup). Either way the endpoint is unreachable; nothing else is accepted.
+        // Exactly 404. /java-pipeline:add-resource-server splits this into "with a token → 404" and
+        // "without → 401" when it puts the API behind tokens.
         mvc.perform(get(endpoint))
-                .andExpect(
-                        result -> assertThat(result.getResponse().getStatus()).isIn(401, 404))
+                .andExpect(status().isNotFound())
                 .andExpect(content().string(not(containsString("propertySources"))));
     }
 }

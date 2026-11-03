@@ -1,6 +1,7 @@
 package __PKG__.support;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -81,5 +82,13 @@ class SecurityTest {
         mvc.perform(post("/security-probe").header("Authorization", TestTokens.withScopes(WRITE)))
                 .andExpect(status().isOk())
                 .andExpect(content().string("write-ok"));
+    }
+
+    @Test
+    void head_needs_the_read_scope_like_get() throws Exception {
+        mvc.perform(head("/security-probe").header("Authorization", TestTokens.withScopes(READ)))
+                .andExpect(status().isOk());
+        mvc.perform(head("/security-probe").header("Authorization", TestTokens.withScopes(WRITE)))
+                .andExpect(status().isForbidden());
     }
 }

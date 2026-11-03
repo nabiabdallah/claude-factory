@@ -13,7 +13,10 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
 import java.security.interfaces.RSAPublicKey;
+import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.locks.LockSupport;
 import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.MapPropertySource;
@@ -58,11 +61,16 @@ public class TestJwtInitializer implements ApplicationContextInitializer<Configu
                     .toString(true);
             var discovery = """
                     {"issuer":"%s","jwks_uri":"%s/jwks","subject_types_supported":["public"],\
-                    "response_types_supported":["code"],"id_token_signing_alg_values_supported":["RS256"]}"""
-                    .formatted(issuer, issuer);
+                    "response_types_supported":["code"],"id_token_signing_alg_values_supported":["RS256"]}""".formatted(issuer, issuer);
             server.createContext("/.well-known/openid-configuration", exchange -> respond(exchange, discovery));
             server.createContext("/jwks", exchange -> respond(exchange, jwks));
-            server.setExecutor(null);
+            // A pool of daemon threads: a stalled response (see stall()) must not block other requests, and the
+            // server must not keep the JVM alive.
+            server.setExecutor(Executors.newCachedThreadPool(runnable -> {
+                var thread = new Thread(runnable, "test-identity-provider");
+                thread.setDaemon(true);
+                return thread;
+            }));
             server.start();
             Runtime.getRuntime().addShutdownHook(new Thread(() -> server.stop(0)));
         } catch (NoSuchAlgorithmException e) {
@@ -72,7 +80,25 @@ public class TestJwtInitializer implements ApplicationContextInitializer<Configu
         }
     }
 
+    private static volatile boolean stalled;
+
+    /**
+     * Makes the stand-in issuer stop answering (discovery and JWKS) until {@link #resume()}, to test that the
+     * service doesn't hang on a slow or unreachable identity provider. Responses resume immediately on release.
+     */
+    public static void stall() {
+        stalled = true;
+    }
+
+    public static void resume() {
+        stalled = false;
+    }
+
     private static void respond(HttpExchange exchange, String json) throws IOException {
+        long deadline = System.nanoTime() + Duration.ofSeconds(60).toNanos();
+        while (stalled && System.nanoTime() < deadline) {
+            LockSupport.parkNanos(Duration.ofMillis(20).toNanos());
+        }
         var body = json.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(200, body.length);
