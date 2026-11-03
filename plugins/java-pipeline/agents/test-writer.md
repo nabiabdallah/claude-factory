@@ -20,5 +20,23 @@ Process:
 7. Run `mvnw-sandboxed -q test` and confirm the new tests FAIL for the right reason
    (missing behaviour, not a compile error in unrelated code).
 
+Concurrency and safeguards (locking, transactions, idempotency) — tests must prove the protection, not
+just pass:
+- **Force the overlap; never rely on timing.** Starting threads together does not make them overlap; such
+  a test passes with no locking at all. Make the conflict happen for certain:
+  - hold the contested row lock in the test's own transaction (`DbLocks.hold(...)`), start the
+    competing calls, wait until Postgres shows them blocked (`DbLocks.awaitLockWaiters(jdbc, n,
+    "<statement pattern>")`, scoped to the statement under test, never "any session"), then release;
+  - or pause the first call at a precise point with a decorator around a port (e.g. after an
+    idempotency claim) and release it once the second call is observed waiting.
+- **Assert the failure mode exactly.** Deadlock-freedom = no SQLState `40P01` in the cause chain
+  (`DbLocks.sqlStates`); Postgres aborts deadlocks, so "it didn't time out" proves nothing. A timeout
+  test must check the cause (e.g. "lock timeout" in the log), not just "any 500".
+- **Timeouts are safety nets that fail the test**, never the synchronisation mechanism.
+- **Real commits:** tests that need them use `@Transactional(propagation = NOT_SUPPORTED)`, unique ids
+  per test, SQL seeding and cleanup in `@AfterEach`; wrap use cases with the production isolation level.
+- **Retry after failure:** when the spec says a failed operation can be retried (e.g. same idempotency
+  key), test the retry after the cause is fixed, not only that nothing changed.
+
 Report back: the list of test methods, each mapped to the acceptance criterion it covers,
 and the failure reason observed.

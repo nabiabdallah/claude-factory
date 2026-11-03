@@ -16,6 +16,16 @@ Review for:
 - **Idempotency & concurrency**: duplicate requests, concurrent debits on one account.
 - **Security**: input validation at the web boundary, no secrets in code/config, no PII or full account numbers in logs or exception messages.
 - **Tests**: do they assert behaviour, or just that code runs? Any test that would pass with the feature removed?
+  For locking, transactions and idempotency, check the implementer's mutation results (see the new-feature
+  skill, stage 5) and that concurrency tests force the overlap instead of relying on timing.
+- **Database specifics** (when persistence changed):
+  - PII via driver error detail: Postgres' `Failing row contains (<id>, …)` lands in exception messages
+    unless `logServerErrorDetail=false`; any logged constraint violation can leak account ids.
+  - Silent rounding: stored amounts read into a scale-fixing type (e.g. `Money`) must not round
+    (`RoundingMode.UNNECESSARY` → error); request amounts with more decimals than the currency allows are a
+    400, not rounded.
+  - Isolation: if correctness depends on an isolation level, a test must prove the use case runs at it.
+  - Timeouts: `lock_timeout` (and `statement_timeout` where relevant) set; waiters can't hang forever.
 - **Scope creep**: changes unrelated to the spec.
 
 Output:

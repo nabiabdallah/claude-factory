@@ -20,7 +20,12 @@ Check the plan for:
 - **Money & correctness**: BigDecimal + currency, rounding mode stated, idempotency key on anything that moves money, explicit failure modes (timeouts, partial failure, retries).
 - **Testability**: is there a unit test per use case with in-memory adapters? Are acceptance criteria from the spec each covered by a test?
 - **Scope**: anything in the plan the spec didn't ask for? Any new dependency without a reason?
-- **ADR needed?** Flag decisions that should be recorded.
+- **Concurrency** (anything that moves money or must happen once): locking strategy and lock order stated,
+  isolation level stated and required, idempotency claim protocol atomic with the effect, failure leaves
+  nothing behind, and tests that force the overlap (not timing) for each concurrency criterion.
+- **Identity & hashing**: fingerprints, cache keys or dedup keys built from raw values, never from a masked
+  `toString()`; field encoding unambiguous (length-prefixed, or a separator the values can't contain).
+- **ADR needed?** Flag decisions that should be recorded. A concurrency/locking strategy always needs one.
 
 Output exactly:
 ```

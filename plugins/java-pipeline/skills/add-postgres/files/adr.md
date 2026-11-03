@@ -17,6 +17,8 @@ sandbox, where Docker is not available.
 - **Transactions:** one per use-case call, applied in `config/` by wrapping the use-case bean with
   `TransactionalUseCases.wrap(...)` (Spring `TransactionInterceptor`, default propagation, rollback on any
   runtime exception). `application/` has no `@Transactional`.
+- **Timeouts and error detail:** `lock_timeout = 5s` on every connection; the driver's
+  `logServerErrorDetail` is off so constraint errors don't carry row data (identifiers) into logs.
 - **Tests:** a real embedded Postgres (zonky embedded-postgres) for every Spring test context, started once
   per test JVM; `@PostgresTest` for repository adapters.
 - **Structure:** ArchUnit rule `sql_only_in_persistence_adapters_and_config` keeps `java.sql`, `javax.sql`,

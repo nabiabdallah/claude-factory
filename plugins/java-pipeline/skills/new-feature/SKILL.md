@@ -34,6 +34,14 @@ Follow these stages in order. Do not skip a stage; stop and ask the user if one 
 ## 5. Verify
 - Run `mvnw-sandboxed -q verify` (tests + ArchUnit + formatting). Fix the cause of any failure;
   never edit `ArchitectureTest` or delete a test to go green.
+- Run it yourself even though the Stop hook also does: the hook only acts on the project the session was
+  started in.
+- **Mutation-check critical safeguards** (locking, lock order, transactions, idempotency, authorisation):
+  for each one, temporarily remove or break it in production code, run the matching tests, and confirm at
+  least one fails; then restore the code and confirm it is byte-identical to before (keep a backup). A
+  mutation must really remove the protection — e.g. locking in a *different but consistent* order is not a
+  lock-order mutation; locking in request order is. If a mutation survives, the tests are missing
+  something: add or fix a test (not production code) until it is caught.
 
 ## 6. Review
 - Delegate to the `java-pipeline:code-reviewer` agent. Fix every MUST FIX item, then re-run `mvnw-sandboxed -q verify`.
@@ -42,5 +50,6 @@ Follow these stages in order. Do not skip a stage; stop and ask the user if one 
 - Commit on a feature branch with a message referencing the spec. Stage files by path
   (`git add src/... docs/...`); never `git add -A` or `git add .` — inside the sandbox those
   pick up `/dev/null` placeholders under `.claude/` and fail.
-- Report to the user: what was built, acceptance criteria → tests mapping,
-  reviewer findings you fixed, anything deferred, and whether an ADR was written.
+- Report to the user: what was built, acceptance criteria → tests mapping, mutation checks and their
+  results, reviewer findings you fixed, anything deferred, and whether an ADR was written. Put the same
+  in the PR description.
