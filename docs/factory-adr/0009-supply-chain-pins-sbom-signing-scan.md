@@ -45,3 +45,12 @@ The repos are private on a free GitHub plan: code scanning (SARIF, CodeQL, depen
   The repo setting "Allow GitHub Actions to create pull requests" must be on.
 - Negative: signatures aren't enforced at deploy time yet (admission policy) — deploy safety (#3).
 - Existing services get pins/SBOM through the parent bump, but not the CI changes (templates are copied once).
+
+## First scan (2026-11-03)
+The first CI scan failed with 32 fixable HIGH/CRITICAL findings:
+- **Base image:** the `java21-debian12` line lagged Debian's security updates, so the base moved to
+  `java21-debian13`, still Java 21.
+- **Tomcat and Jackson:** both were pinned to fixed versions in `factory-parent`.
+- **Spring MVC:** CVE-2026-47884 and CVE-2026-47890 in `spring-webmvc` 6.2.19 are fixed only in Spring 7.
+  Boot 3.5 and Spring 6.2 are out of OSS support, so the owner accepted a 30-day exception in `.trivyignore.yaml`
+  (expires 2026-12-03). The factory migrates to Spring Boot 4 before that date.
