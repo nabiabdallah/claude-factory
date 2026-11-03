@@ -81,6 +81,19 @@ this repo (see `docs/factory-adr/0003-shared-parent-pom-on-github-packages.md`).
 `publish-parent.yml` checks the tag matches the pom and deploys. Services pick it up by bumping their
 parent version.
 
+## Dependency updates (Dependabot)
+
+Every repo has `.github/dependabot.yml` (the templates carry it to new services): weekly PRs, minor/patch
+grouped, majors separate, all through normal CI (ADR 0005). Each repo needs the **Dependabot** secret
+`FACTORY_PACKAGES_TOKEN` (same `read:packages` token; separate from the Actions secret):
+
+```bash
+gh secret set FACTORY_PACKAGES_TOKEN --app dependabot --repo nabiabdallah/<repo>
+```
+
+Spring Boot or plugin bump: Dependabot PR on `factory-parent` → merge → tag a new parent → Dependabot
+opens a parent-version PR in every service.
+
 ## Update
 
 - **Local directory marketplace**: Claude Code reads the plugin in place. Edits take effect at

@@ -1,0 +1,42 @@
+# Weekly dependency PRs for the factory itself (claude-factory ADR 0005).
+# Minor/patch updates are grouped per ecosystem; majors arrive one PR each.
+# The templates build against factory-parent from GitHub Packages, so Maven updates need the
+# Dependabot secret FACTORY_PACKAGES_TOKEN (classic PAT, read:packages only).
+version: 2
+
+registries:
+  factory-packages:
+    type: maven-repository
+    url: https://maven.pkg.github.com/nabiabdallah/claude-factory
+    username: nabiabdallah
+    password: ${{secrets.FACTORY_PACKAGES_TOKEN}}
+
+updates:
+  - package-ecosystem: "maven"
+    directories:
+      - "/parents/factory-parent"
+      - "/plugins/java-pipeline/templates/skeleton"
+      - "/plugins/java-pipeline/templates/payments-example"
+    registries: "*"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+    groups:
+      maven-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+      - "/plugins/java-pipeline/templates/skeleton"
+      - "/plugins/java-pipeline/templates/payments-example"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
