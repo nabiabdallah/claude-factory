@@ -4,10 +4,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
+  <!-- Java version, test setup, formatting gate and plugin versions come from factory-parent.
+       To pick up build fixes, bump its version. -->
   <parent>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.5.16</version>
+    <groupId>io.github.nabiabdallah.factory</groupId>
+    <artifactId>factory-parent</artifactId>
+    <version>1.0.0</version>
     <relativePath/>
   </parent>
 
@@ -17,13 +19,21 @@
   <name>app-skeleton</name>
   <description>Spring Boot hexagonal service created from the java-pipeline skeleton</description>
 
-  <properties>
-    <java.version>21</java.version>
-    <archunit.version>1.5.1</archunit.version>
-    <spotless.version>3.10.4</spotless.version>
-    <!-- Defined empty so @{argLine} resolves when no other plugin (e.g. JaCoCo) sets it. -->
-    <argLine></argLine>
-  </properties>
+  <!-- Maven Central first, so only factory artifacts are looked up on GitHub Packages.
+       Credentials: <server id="github"> in ~/.m2/settings.xml (CI: setup-java server-id). -->
+  <repositories>
+    <repository>
+      <id>central</id>
+      <url>https://repo.maven.apache.org/maven2</url>
+    </repository>
+    <repository>
+      <id>github</id>
+      <url>https://maven.pkg.github.com/nabiabdallah/claude-factory</url>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
 
   <dependencies>
     <dependency>
@@ -43,7 +53,6 @@
     <dependency>
       <groupId>com.tngtech.archunit</groupId>
       <artifactId>archunit-junit5</artifactId>
-      <version>${archunit.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -53,50 +62,6 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
-      </plugin>
-
-      <!-- Load Mockito as a Java agent instead of letting it self-attach at runtime:
-           Mockito's documented setup for JDK 21+, and required inside the Claude Code sandbox,
-           where the JVM attach mechanism can't use /tmp. -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-dependency-plugin</artifactId>
-        <executions>
-          <execution>
-            <goals>
-              <goal>properties</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-surefire-plugin</artifactId>
-        <configuration>
-          <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
-        </configuration>
-      </plugin>
-
-      <!-- Formatting gate: `spotless:check` runs in verify, the PostToolUse hook runs `spotless:apply`. -->
-      <plugin>
-        <groupId>com.diffplug.spotless</groupId>
-        <artifactId>spotless-maven-plugin</artifactId>
-        <version>${spotless.version}</version>
-        <configuration>
-          <java>
-            <palantirJavaFormat/>
-            <removeUnusedImports/>
-            <importOrder/>
-          </java>
-        </configuration>
-        <executions>
-          <execution>
-            <goals>
-              <goal>check</goal>
-            </goals>
-            <phase>verify</phase>
-          </execution>
-        </executions>
       </plugin>
     </plugins>
   </build>

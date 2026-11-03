@@ -26,6 +26,10 @@ jobs:
           java-version: '21'
           cache: maven
 
+      - name: Install factory-parent locally (templates build against this commit's parent)
+        working-directory: parents/factory-parent
+        run: ./mvnw -B install
+
       - name: Verify the skeleton template
         working-directory: plugins/java-pipeline/templates/skeleton
         run: ./mvnw -B verify

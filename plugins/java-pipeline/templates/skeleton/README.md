@@ -8,6 +8,10 @@ code, docs and project permissions.
 
 ## First run
 
+The build inherits `factory-parent` from GitHub Packages, so Maven needs a read token: a
+`<server id="github">` in `~/.m2/settings.xml`, and for CI the repo secret `FACTORY_PACKAGES_TOKEN`
+(classic PAT with only `read:packages`). See the claude-factory README, "Shared build".
+
 ```bash
 ./mvnw verify      # must be green before you hand anything to an agent
 claude             # accept the workspace-trust prompt and the plugin install prompt

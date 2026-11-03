@@ -19,11 +19,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # factory-parent comes from GitHub Packages in the claude-factory repo. Maven packages are
+      # repository-scoped there, so this repo's GITHUB_TOKEN can't read them: the repo secret
+      # FACTORY_PACKAGES_TOKEN holds a classic PAT with only read:packages.
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
+          server-id: github
+          server-username-env-var: GITHUB_ACTOR
+          server-password-env-var: FACTORY_PACKAGES_TOKEN
 
       - name: Verify (tests, ArchUnit, Spotless)
         run: ./mvnw -B verify
+        env:
+          FACTORY_PACKAGES_TOKEN: ${{ secrets.FACTORY_PACKAGES_TOKEN }}
