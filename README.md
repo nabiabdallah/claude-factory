@@ -69,7 +69,8 @@ this repo (see `docs/factory-adr/0003-shared-parent-pom-on-github-packages.md`).
      <id>github</id><username>nabiabdallah</username><password>TOKEN</password>
    </server></servers></settings>
    ```
-3. Allow `maven.pkg.github.com` in the sandbox: `sandbox.network.allowedDomains` in `~/.claude/settings.json`.
+3. Allow `maven.pkg.github.com` and `github-registry-files.githubusercontent.com` (where GitHub serves the
+   package files) in the sandbox: `sandbox.network.allowedDomains` in `~/.claude/settings.json`.
 
 **Per service repo on GitHub:** add the same token as the secret `FACTORY_PACKAGES_TOKEN`
 (`gh secret set FACTORY_PACKAGES_TOKEN --repo <owner>/<service>`); the service's CI reads it.

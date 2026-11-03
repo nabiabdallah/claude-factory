@@ -34,6 +34,7 @@ only). Locally the same token sits in `~/.m2/settings.xml` (`<server id="github"
 - Negative: a read token must exist locally and in every service repo. Agents running Maven inside the
   sandbox can read `~/.m2/settings.xml`, so they can read the token; its scope is limited to reading
   packages, and it can be revoked at any time.
-- Negative: `maven.pkg.github.com` must be on the sandbox network allowlist.
+- Negative: `maven.pkg.github.com` and `github-registry-files.githubusercontent.com` (package file
+  downloads) must be on the sandbox network allowlist.
 - Follow-ups: a skill that creates the GitHub repo for a new service and sets `FACTORY_PACKAGES_TOKEN`;
   Renovate for parent bumps.
