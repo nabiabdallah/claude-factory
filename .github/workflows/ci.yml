@@ -52,7 +52,8 @@ jobs:
         working-directory: plugins/java-pipeline/templates/skeleton
         run: |
           .github/scripts/ci-tools.sh trivy
-          "$RUNNER_TEMP/ci-bin/trivy" image --input target/jib-image.tar \
+          mkdir -p target/oci-image && tar -xf target/jib-image.tar -C target/oci-image
+          "$RUNNER_TEMP/ci-bin/trivy" image --input target/oci-image \
             --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
             --ignorefile .trivyignore.yaml --exit-code 1
 

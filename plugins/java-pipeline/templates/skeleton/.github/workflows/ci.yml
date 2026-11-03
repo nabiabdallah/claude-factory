@@ -39,8 +39,10 @@ jobs:
 
       # Vulnerability scan of the exact image layers CI would push (claude-factory ADR 0009): fails on
       # HIGH/CRITICAL findings that have a fix. Exceptions go in .trivyignore.yaml with a reason and expiry.
-      - name: Build the image to a tarball (no push)
-        run: ./mvnw -B -q -DskipTests compile jib:buildTar
+      - name: Build the image to a tarball (no push), unpacked as an OCI layout for the scanner
+        run: |
+          ./mvnw -B -q -DskipTests compile jib:buildTar
+          mkdir -p target/oci-image && tar -xf target/jib-image.tar -C target/oci-image
         env:
           FACTORY_PACKAGES_TOKEN: ${{ secrets.FACTORY_PACKAGES_TOKEN }}
 
@@ -49,7 +51,7 @@ jobs:
 
       - name: Scan the image (Trivy)
         run: >
-          trivy image --input target/jib-image.tar
+          trivy image --input target/oci-image
           --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed
           --ignorefile .trivyignore.yaml --exit-code 1
 
