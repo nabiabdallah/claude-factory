@@ -89,6 +89,15 @@ pushes `ghcr.io/nabiabdallah/<service>:<sha>` and `:main` on pushes to `main`. E
 base in `deploy/k8s/`. Factory CI validates the templates' manifests with kubeconform and builds the
 skeleton image with `jib:buildTar` (ADR 0007).
 
+## Supply chain
+
+`factory-parent` 1.3.0+ pins the base image to a digest; Spring Boot writes the SBOM
+(`META-INF/sbom/application.cdx.json`). Template CI scans
+every image with Trivy (fails on fixable HIGH/CRITICAL) and, on `main`, signs the pushed digest with cosign
+(keyless) and attests the SBOM. Actions are pinned to commit SHAs. `ci/check-supply-chain.sh` enforces all of it
+in factory CI; `base-image.yml` opens a weekly PR when distroless publishes a new digest (ADR 0009). Turn on
+**Settings → Actions → General → Allow GitHub Actions to create and approve pull requests** for that PR.
+
 ## Dependency updates (Dependabot)
 
 Every repo has `.github/dependabot.yml` (the templates carry it to new services): weekly PRs, minor/patch

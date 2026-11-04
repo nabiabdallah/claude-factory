@@ -47,6 +47,17 @@ Requires `jq` on your PATH (the plugin hooks parse their JSON input with it).
   Set the image tag in `deploy/k8s/kustomization.yaml` (`newTag`).
 - Build the image locally without pushing (needs network to gcr.io): `./mvnw -DskipTests package jib:buildTar`.
 
+## Supply chain
+
+CI scans the image on every run (Trivy; accepted findings in `.trivyignore.yaml` with a reason and expiry) and,
+on `main`, signs the pushed digest and attests the SBOM (Spring Boot's `META-INF/sbom/application.cdx.json`). Verify an image:
+
+```bash
+cosign verify ghcr.io/nabiabdallah/<service>@sha256:<digest> \
+  --certificate-identity-regexp '^https://github.com/nabiabdallah/<service>/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
 ## What's here
 
 | Path | Role |

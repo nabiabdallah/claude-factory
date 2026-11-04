@@ -18,9 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '21'
@@ -43,6 +43,19 @@ jobs:
         run: |
           ./mvnw -B -q -DskipTests package jib:buildTar
           ls -l target/jib-image.tar
+
+      # Supply chain (factory ADR 0009): pins, SBOM, and the same image scan the templates run.
+      - name: Supply-chain checks (SHA-pinned actions, base digest, pinned tools, SBOM)
+        run: ci/check-supply-chain.sh plugins/java-pipeline/templates/skeleton
+
+      - name: Scan the skeleton image (Trivy, as template CI does)
+        working-directory: plugins/java-pipeline/templates/skeleton
+        run: |
+          .github/scripts/ci-tools.sh trivy
+          mkdir -p target/oci-image && tar -xf target/jib-image.tar -C target/oci-image
+          "$RUNNER_TEMP/ci-bin/trivy" image --input target/oci-image \
+            --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+            --ignorefile .trivyignore.yaml --exit-code 1
 
       - name: Smoke-test new-project (both templates, same/nested/different packages)
         run: |
@@ -75,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install kubeconform (checksum-verified)
         run: |
