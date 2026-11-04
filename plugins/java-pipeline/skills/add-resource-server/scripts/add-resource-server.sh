@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Protect a java-pipeline service as an OAuth2 resource server (JWT). Run from the project root.
-# Adds: oauth2-resource-server + spring-security-test, config/SecurityConfig (health open, GET=read,
+# Adds: the Boot 4 security-oauth2-resource-server starter + its test starter, config/SecurityConfig (health open, GET=read,
 # rest=write), issuer/audience properties, test support (TestJwtInitializer, TestTokens, probe controller)
 # and SecurityTest, a CLAUDE.md section and an ADR. Then runs ./mvnw verify. Does not commit.
 set -euo pipefail
@@ -13,8 +13,13 @@ helper="$script_dir/../../../bin/mvnw-sandboxed"
 
 [[ -f pom.xml ]] || die "run from the project root (no pom.xml in $(pwd))"
 grep -q '<artifactId>factory-parent</artifactId>' pom.xml || die "the project must inherit factory-parent"
-if grep -q '<artifactId>spring-boot-starter-oauth2-resource-server</artifactId>' pom.xml; then
-  die "the resource server is already set up (spring-boot-starter-oauth2-resource-server is in pom.xml)"
+min_parent="2.0.0"
+parent_version="$(sed -n '/<parent>/,/<\/parent>/s|.*<version>\(.*\)</version>.*|\1|p' pom.xml | head -n 1)"
+if [[ "$(printf '%s\n%s\n' "$min_parent" "$parent_version" | sort -V | head -n 1)" != "$min_parent" ]]; then
+  die "needs factory-parent >= ${min_parent} (Spring Boot 4); this project is on ${parent_version}. Upgrade it first (factory ADR 0010)"
+fi
+if grep -qE '<artifactId>spring-boot-starter-(security-)?oauth2-resource-server</artifactId>' pom.xml; then
+  die "the resource server is already set up (an oauth2-resource-server starter is in pom.xml)"
 fi
 grep -q '<artifactId>spring-boot-starter-actuator</artifactId>' pom.xml \
   || die "needs spring-boot-starter-actuator (health probes stay open); add it first (java-pipeline 0.7.0+ templates have it)"
@@ -132,11 +137,11 @@ assert anchor in pom, "no <dependencies> block at project level"
 deps = """  <dependencies>
     <dependency>
       <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+      <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.springframework.security</groupId>
-      <artifactId>spring-security-test</artifactId>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security-oauth2-resource-server-test</artifactId>
       <scope>test</scope>
     </dependency>
 """

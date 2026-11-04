@@ -18,7 +18,7 @@ public class ErrorHandler {
 
     @ExceptionHandler(DomainException.class)
     ProblemDetail businessRule(DomainException e) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

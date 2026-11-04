@@ -75,7 +75,7 @@ class ErrorHandlerTest {
     @Test
     void domain_rule_violation_maps_to_422() throws Exception {
         mvc.perform(get("/probe/{id}/rule", SECRET_ID))
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.detail").value("Rule violated"));
     }
 

@@ -3,6 +3,8 @@
 Personal software factory: a Claude Code plugin marketplace whose plugins implement an
 agentic coding pipeline, plus the templates that new projects are created from.
 
+Status and next steps: [docs/ROADMAP.md](docs/ROADMAP.md).
+
 ## Layout
 
 ```
@@ -110,6 +112,9 @@ gh secret set FACTORY_PACKAGES_TOKEN --app dependabot --repo nabiabdallah/<repo>
 
 Spring Boot or plugin bump: Dependabot PR on `factory-parent` → merge → tag a new parent → Dependabot
 opens a parent-version PR in every service.
+
+`factory-parent` 2.0.0 is Spring Boot 4.1. Moving a service from 1.x is a code change. The checklist is in
+`docs/factory-adr/0010-spring-boot-4-migration.md`.
 
 ## Update
 
