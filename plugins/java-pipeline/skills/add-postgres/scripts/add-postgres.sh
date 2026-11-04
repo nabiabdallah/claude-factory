@@ -11,10 +11,14 @@ die() { echo "add-postgres: $*" >&2; exit 1; }
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 files="$script_dir/../files"
 helper="$script_dir/../../../bin/mvnw-sandboxed"
-min_parent="1.1.0"
+min_parent="2.0.0"
 
 [[ -f pom.xml ]] || die "run from the project root (no pom.xml in $(pwd))"
 grep -q '<artifactId>factory-parent</artifactId>' pom.xml || die "the project must inherit factory-parent"
+parent_version="$(sed -n '/<parent>/,/<\/parent>/s|.*<version>\(.*\)</version>.*|\1|p' pom.xml | head -n 1)"
+if [[ "$(printf '%s\n%s\n' "$min_parent" "$parent_version" | sort -V | head -n 1)" != "$min_parent" ]]; then
+  die "needs factory-parent >= ${min_parent} (Spring Boot 4); this project is on ${parent_version}. Upgrade it first (factory ADR 0010)"
+fi
 if grep -q '<artifactId>flyway-database-postgresql</artifactId>' pom.xml; then
   die "Postgres is already set up (flyway-database-postgresql is in pom.xml)"
 fi
@@ -78,7 +82,9 @@ put main/application-datasource.properties "$props_tmp"
 cat "$props_tmp" >> src/main/resources/application.properties
 rm -f "$props_tmp"
 
-# Dependencies (versions: Spring Boot for JDBC/Flyway/driver, factory-parent >= 1.1.0 for embedded Postgres).
+# Dependencies (versions: Spring Boot for JDBC/Flyway/driver, factory-parent for embedded Postgres).
+# Boot 4 auto-configures Flyway only with spring-boot-starter-flyway; the bare Flyway artifact alone
+# would leave migrations silently unapplied.
 python3 -I - pom.xml <<'PY'
 import sys
 path = sys.argv[1]
@@ -89,6 +95,10 @@ deps = """  <dependencies>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-flyway</artifactId>
     </dependency>
     <dependency>
       <groupId>org.flywaydb</groupId>
@@ -104,16 +114,14 @@ deps = """  <dependencies>
       <artifactId>embedded-postgres</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc-test</artifactId>
+      <scope>test</scope>
+    </dependency>
 """
 open(path, "w").write(pom.replace(anchor, deps, 1))
 PY
-
-parent_version="$(sed -n '/<parent>/,/<\/parent>/s|.*<version>\(.*\)</version>.*|\1|p' pom.xml | head -n 1)"
-bumped=""
-if [[ "$(printf '%s\n%s\n' "$min_parent" "$parent_version" | sort -V | head -n 1)" != "$min_parent" ]]; then
-  sed -i "/<parent>/,/<\/parent>/s|<version>${parent_version}</version>|<version>${min_parent}</version>|" pom.xml
-  bumped="factory-parent ${parent_version} -> ${min_parent} (needed for embedded Postgres versions)"
-fi
 
 if [[ -f CLAUDE.md ]]; then
   cat "$files/claude-md-section.md" >> CLAUDE.md
@@ -133,7 +141,6 @@ fi
 "$helper" -q -B verify || die "./mvnw verify failed; changes left in place for inspection (not committed)"
 
 echo "add-postgres: Postgres added to ${name} (package ${pkg}); ./mvnw verify green. Nothing committed."
-[[ -n "$bumped" ]] && echo "add-postgres: ${bumped}"
 echo "add-postgres: ADR ${adr}; local database: compose.yaml (docker compose up -d, outside the sandbox)."
 if ! grep -rqs 'sql_only_in_persistence_adapters_and_config' src/test/java; then
   cat <<EOF

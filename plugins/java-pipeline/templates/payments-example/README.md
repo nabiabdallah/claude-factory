@@ -1,6 +1,6 @@
 # Spring service (java-pipeline template)
 
-A Spring Boot 3.5 / Java 21 hexagonal service, created by `/java-pipeline:new-project`.
+A Spring Boot 4.1 / Java 21 hexagonal service, created by `/java-pipeline:new-project`.
 The agentic pipeline — **spec → plan → architect review → failing tests → implementation →
 `./mvnw verify` gate → code review** — comes from the `java-pipeline` plugin; this repo
 holds only code, docs and project permissions.

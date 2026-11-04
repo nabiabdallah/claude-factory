@@ -111,6 +111,9 @@ gh secret set FACTORY_PACKAGES_TOKEN --app dependabot --repo nabiabdallah/<repo>
 Spring Boot or plugin bump: Dependabot PR on `factory-parent` → merge → tag a new parent → Dependabot
 opens a parent-version PR in every service.
 
+`factory-parent` 2.0.0 is Spring Boot 4.1. Moving a service from 1.x is a code change. The checklist is in
+`docs/factory-adr/0010-spring-boot-4-migration.md`.
+
 ## Update
 
 - **Local directory marketplace**: Claude Code reads the plugin in place. Edits take effect at

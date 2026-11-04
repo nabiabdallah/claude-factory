@@ -54,3 +54,7 @@ The first CI scan failed with 32 fixable HIGH/CRITICAL findings:
 - **Spring MVC:** CVE-2026-47884 and CVE-2026-47890 in `spring-webmvc` 6.2.19 are fixed only in Spring 7.
   Boot 3.5 and Spring 6.2 are out of OSS support, so the owner accepted a 30-day exception in `.trivyignore.yaml`
   (expires 2026-12-03). The factory migrates to Spring Boot 4 before that date.
+
+## Update (2026-11-04)
+The Spring Boot 4.1 migration (ADR 0010, factory-parent 2.0.0) removed the two Spring MVC exceptions and the
+Tomcat/Jackson overrides. `.trivyignore.yaml` is empty.

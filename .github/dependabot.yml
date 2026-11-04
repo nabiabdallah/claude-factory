@@ -22,11 +22,6 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "deps"
-    ignore:
-      # Owner decision: stay on Spring Boot 3.x for now; a Boot 4 move is a planned migration
-      # (factory-parent, add-postgres test setup, every service), not a Dependabot PR. 3.5.x patches still come.
-      - dependency-name: "org.springframework.boot:spring-boot-starter-parent"
-        update-types: ["version-update:semver-major"]
     groups:
       maven-minor-and-patch:
         patterns: ["*"]

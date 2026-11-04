@@ -15,7 +15,7 @@ disable-model-invocation: true
    "${CLAUDE_PLUGIN_ROOT}/skills/add-postgres/scripts/add-postgres.sh"
    ```
 
-   It adds the dependencies (and bumps `factory-parent` to at least 1.1.0), `db/migration/V1__baseline.sql`,
+   It adds the dependencies (it needs `factory-parent` 2.0.0+, Spring Boot 4), `db/migration/V1__baseline.sql`,
    `adapter/out/persistence/`, `config/TransactionalUseCases`, test support (`@PostgresTest`, embedded
    Postgres for every Spring test context), datasource properties, `compose.yaml`, a `CLAUDE.md` section
    and an ADR, then runs `./mvnw verify`. It refuses to overwrite existing files and does not commit.
