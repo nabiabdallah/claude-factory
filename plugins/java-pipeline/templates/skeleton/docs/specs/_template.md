@@ -31,6 +31,11 @@ Numbered, testable, one behaviour each. The test-writer agent maps one or more t
 What happens on: invalid input, unknown entity, downstream timeout, duplicate request,
 partial failure, another caller's data. Expected status codes / error types.
 
+## Rollout
+Schema or contract changes the running version must survive during a rolling update (old and new pods run at
+once). Default: expand/contract, so nothing breaks. If the old version can't survive it, say why: the
+migration is then `-- rollout: recreate` and the release has downtime (owner's call).
+
 ## Non-functional
 Latency, volume, audit/logging requirements, PII constraints, data retention.
 

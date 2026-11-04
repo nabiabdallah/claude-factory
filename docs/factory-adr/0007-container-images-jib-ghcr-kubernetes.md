@@ -40,3 +40,5 @@ manifests must use the health probes from ADR 0006.
   Jib's base image. Pinning a digest is a follow-up once a release cadence exists.
 - Follow-ups: ingress/gateway, network policies, a deploy job and environments (overlays) once a cluster
   exists; image signing and SBOM.
+- Amended by ADR 0012: the single base with `newTag: main` became base + staging/prod overlays pinned to
+  commits on `main`, with a PDB, a NetworkPolicy and a migration rollout rule.

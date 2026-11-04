@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Add Postgres persistence to a java-pipeline service. Run from the project root.
 # Adds: JDBC/Flyway/Postgres/embedded-postgres dependencies, db/migration/V1, adapter/out/persistence,
-# config/TransactionalUseCases, test support (@PostgresTest, DbLocks + embedded Postgres for every Spring test),
+# config/TransactionalUseCases, test support (@PostgresTest, DbLocks, MigrationRolloutTest + embedded Postgres for every Spring test),
 # datasource properties, compose.yaml, a CLAUDE.md section and an ADR. Then runs ./mvnw verify.
 # It does not commit, and it does not edit ArchitectureTest (it prints the rule to add if it's missing).
 set -euo pipefail
@@ -45,6 +45,7 @@ targets=(
   "compose.yaml"
   "src/test/java/$pkg_path/support/DbLocks.java"
   "src/test/java/$pkg_path/support/DbLocksTest.java"
+  "src/test/java/$pkg_path/support/MigrationRolloutTest.java"
 )
 for t in "${targets[@]}"; do
   [[ ! -e "$t" ]] || die "$t already exists; refusing to overwrite"
@@ -72,6 +73,7 @@ put test/resources/META-INF/spring.factories "${targets[7]}"
 put compose.yaml "${targets[8]}"
 put test/support/DbLocks.java "${targets[9]}"
 put test/support/DbLocksTest.java "${targets[10]}"
+put test/support/MigrationRolloutTest.java "${targets[11]}"
 if grep -q '<artifactId>spring-boot-starter-actuator</artifactId>' pom.xml; then
   put test/support/PostgresReadinessTest.java "$readiness_test"
 fi

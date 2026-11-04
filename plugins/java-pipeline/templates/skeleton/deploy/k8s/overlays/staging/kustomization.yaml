@@ -1,0 +1,14 @@
+# staging. Promote by changing newTag to a commit on main (CI pushed an image for it) in a reviewed PR;
+# .github/scripts/check-deploy.sh checks the change. "unreleased" means nothing has been promoted yet.
+#   kubectl apply -k deploy/k8s/overlays/staging
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: app-skeleton-staging
+resources:
+  - ../../base
+replicas:
+  - name: app-skeleton
+    count: 1
+images:
+  - name: ghcr.io/nabiabdallah/app-skeleton
+    newTag: unreleased

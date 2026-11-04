@@ -34,6 +34,11 @@ Check the plan for:
 - **Idempotency key scope**: keys are unique per (caller, key), stored with a request fingerprint. The same key
   from another caller is independent: it never replays the first caller's response (a data leak) and never
   blocks them. A criterion covers two callers sending the same key.
+- **Rollout compatibility** (schema or API change): old and new pods run side by side during a rolling update,
+  and the old version keeps running against the new schema. Expand/contract preferred (add, backfill, switch
+  reads/writes, drop in a later release). A drop, rename, type change, `SET NOT NULL` or new constraint the old
+  version would hit needs either a "compatible" reason or the spec's Rollout section accepting `recreate`
+  (downtime). Unstated → BLOCKING.
 - **ADR needed?** Flag decisions that should be recorded. A concurrency/locking strategy always needs one.
 
 Output exactly:

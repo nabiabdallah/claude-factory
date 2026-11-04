@@ -63,6 +63,24 @@ jobs:
           path: target/classes/META-INF/sbom/application.cdx.json
           if-no-files-found: ignore
 
+  # Deploy gate (claude-factory ADR 0012): overlays render and match the schemas, images are pinned to commits
+  # on main, and a promotion (an overlay's newTag changed) follows the migration rollout rule.
+  manifests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the checks compare commits: is the tag on main, which migrations lie in between
+
+      - name: Install pinned, checksum-verified tools
+        run: .github/scripts/ci-tools.sh kubeconform
+
+      - name: Check deploy manifests and promotions
+        run: .github/scripts/check-deploy.sh "$BASE"
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+
   # Container image (claude-factory ADR 0007): only for pushes to main, after verify passed.
   # Jib builds without a Docker daemon and pushes with this repo's own token. The pushed digest is
   # signed keylessly (Sigstore, GitHub OIDC) and the SBOM is attached as a signed attestation.
