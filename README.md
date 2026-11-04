@@ -116,6 +116,11 @@ opens a parent-version PR in every service.
 `factory-parent` 2.0.0 is Spring Boot 4.1. Moving a service from 1.x is a code change. The checklist is in
 `docs/factory-adr/0010-spring-boot-4-migration.md`.
 
+`factory-parent` 2.1.0 adds build rules (`docs/factory-adr/0013-build-hygiene-enforcer-coverage.md`): Maven
+Enforcer at `validate` (Java 21+, Maven 3.9+, pinned plugins, no SNAPSHOT or banned dependencies, no dependency
+compiled for Java 22+) and a JaCoCo coverage floor at `verify` (80% lines, 70% branches; a service may raise it,
+not lower it). A service that misses either fails on the upgrade PR: add tests or drop the dependency.
+
 ## Update
 
 - **Local directory marketplace**: Claude Code reads the plugin in place. Edits take effect at

@@ -90,6 +90,11 @@ jobs:
           (cd "$out/ci-secured" && "$GITHUB_WORKSPACE/plugins/java-pipeline/skills/add-resource-server/scripts/add-resource-server.sh")
           (cd "$out/ci-skeleton" && "$GITHUB_WORKSPACE/plugins/java-pipeline/skills/add-resource-server/scripts/add-resource-server.sh")
 
+      # Build hygiene (factory ADR 0013): banned/SNAPSHOT/newer-bytecode dependencies, unpinned plugins, a lowered
+      # coverage floor and untested code each fail the build of a generated project.
+      - name: Test factory-parent's build rules (Enforcer, coverage floor) on a generated project
+        run: ci/test-build-hygiene.sh "$RUNNER_TEMP/projects/ci-skeleton"
+
   manifests:
     name: Kubernetes manifests render and match the schemas
     runs-on: ubuntu-latest

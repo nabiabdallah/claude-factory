@@ -52,5 +52,8 @@ soon as the first class lands in its layer.
 ## Don't
 - Don't edit `ArchitectureTest` or `archunit.properties` to make a build pass. If a rule is wrong, stop and say so.
 - Don't add dependencies without stating why in the plan.
+- Don't lower `factory.coverage.*.minimum`, exclude classes from JaCoCo, skip Enforcer/JaCoCo
+  (`-Denforcer.skip`, `-Djacoco.skip`) or exclude a banned dependency from the rule to get green: add tests or
+  remove the dependency. The floor (80% lines, 70% branches) comes from factory-parent.
 - Don't read `.env` or anything under `secrets/`.
 - Stage files by path when committing; never `git add -A` / `git add .` (sandbox placeholders under `.claude/` break it).

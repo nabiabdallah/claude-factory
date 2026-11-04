@@ -56,6 +56,14 @@ Requires `jq` on your PATH (the plugin hooks parse their JSON input with it).
   promotion must remove it. CI enforces both. Prefer expand/contract, which keeps the rolling update.
 - Build the image locally without pushing (needs network to gcr.io): `./mvnw -DskipTests package jib:buildTar`.
 
+## Build rules
+
+`factory-parent` checks the build (claude-factory ADR 0013): Maven Enforcer at `validate` (Java 21+, Maven 3.9+,
+pinned plugins, no SNAPSHOT or banned dependencies such as JUnit 4, log4j 1 or `javax.*`, no dependency built for
+Java 22+), and a coverage floor at `verify`: 80% of lines and 70% of branches (JaCoCo; report in
+`target/site/jacoco/index.html`, and a `coverage` artifact in CI). Raise the floor in this POM with
+`factory.coverage.line.minimum` / `factory.coverage.branch.minimum`; lower values fail the build.
+
 ## Supply chain
 
 CI scans the image on every run (Trivy; accepted findings in `.trivyignore.yaml` with a reason and expiry) and,
