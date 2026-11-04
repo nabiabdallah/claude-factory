@@ -1,6 +1,6 @@
 ---
 name: add-resource-server
-description: Protect the current java-pipeline service as an OAuth2 resource server — every request needs a valid JWT (signature, issuer, audience, expiry) except health probes; GET needs <service>:read, other methods <service>:write; real signed test tokens (TestTokens), no identity provider needed for tests. Use when the user asks to add authentication, authorization, security, OAuth2 or JWT to a service.
+description: Protect the current java-pipeline service as an OAuth2 resource server — every request needs a valid JWT (signature, issuer, audience, expiry, subject) from an https issuer except health probes; GET needs <service>:read, other methods <service>:write; real signed test tokens (TestTokens), no identity provider needed for tests. Use when the user asks to add authentication, authorization, security, OAuth2 or JWT to a service.
 disable-model-invocation: true
 ---
 

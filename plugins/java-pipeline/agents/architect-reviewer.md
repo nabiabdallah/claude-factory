@@ -25,6 +25,15 @@ Check the plan for:
   nothing behind, and tests that force the overlap (not timing) for each concurrency criterion.
 - **Identity & hashing**: fingerprints, cache keys or dedup keys built from raw values, never from a masked
   `toString()`; field encoding unambiguous (length-prefixed, or a separator the values can't contain).
+- **Caller isolation** (any data that belongs to a customer): the spec's Authorization section says whose
+  data each operation touches. The caller (token subject) reaches the use case in the command, taken from the
+  authenticated principal in the web adapter, never from a body, path or header value. Ownership is checked
+  before any other rule, so no error reveals another customer's data (someone else's account → 404, never 422
+  "insufficient funds"); not-owned and not-found give the same answer; lists and searches are filtered by
+  caller. Acceptance criteria include a second caller for reads, writes and each error path. Missing → BLOCKING.
+- **Idempotency key scope**: keys are unique per (caller, key), stored with a request fingerprint. The same key
+  from another caller is independent: it never replays the first caller's response (a data leak) and never
+  blocks them. A criterion covers two callers sending the same key.
 - **ADR needed?** Flag decisions that should be recorded. A concurrency/locking strategy always needs one.
 
 Output exactly:

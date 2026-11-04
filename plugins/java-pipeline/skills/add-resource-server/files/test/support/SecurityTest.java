@@ -91,4 +91,19 @@ class SecurityTest {
         mvc.perform(head("/security-probe").header("Authorization", TestTokens.withScopes(WRITE)))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    void token_without_a_usable_subject_is_401() throws Exception {
+        for (var subject : new String[] {null, "", "   ", "a".repeat(256), "user\u0000admin", "user\nadmin"}) {
+            var token = TestTokens.token().scopes(READ).subject(subject).bearer();
+            mvc.perform(get("/security-probe").header("Authorization", token))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    @Test
+    void subject_up_to_255_characters_is_accepted() throws Exception {
+        var token = TestTokens.token().scopes(READ).subject("a".repeat(255)).bearer();
+        mvc.perform(get("/security-probe").header("Authorization", token)).andExpect(status().isOk());
+    }
 }

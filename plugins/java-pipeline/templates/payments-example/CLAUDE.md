@@ -30,7 +30,8 @@ com.example.payments
 - Money is `Money` (BigDecimal + currency). Never `double`/`float` for amounts.
 - Domain rule violations throw a domain exception; the web adapter maps it to an HTTP status.
 - New external integration = new port in `port/out` + adapter in `adapter/out/<name>`. Never call an external system from `application` or `domain`.
-- Idempotency: any operation that moves money takes a client-supplied idempotency key.
+- Idempotency: any operation that moves money takes a client-supplied idempotency key. Once callers are authenticated, the key is unique per
+  (caller, key): another caller's same key is a separate request, never a replay of someone else's response.
 - Never log full account numbers, amounts with customer identifiers, or tokens.
 - Tests first. Every use case has a unit test with an in-memory adapter; no Spring context in unit tests.
 

@@ -36,7 +36,8 @@ soon as the first class lands in its layer.
   `IllegalArgumentException` is treated as a bug (500).
 - New external integration = new port in `port/out` + adapter in `adapter/out/<name>`. Never call an
   external system from `application` or `domain`.
-- Anything that changes state on retry (payments, orders, messages) takes a client-supplied idempotency key.
+- Anything that changes state on retry (payments, orders, messages) takes a client-supplied idempotency key. Once callers are authenticated, the key is unique per
+  (caller, key): another caller's same key is a separate request, never a replay of someone else's response.
 - Never log full account numbers, customer identifiers with amounts, or tokens.
 - Tests first. Every use case has a unit test with in-memory fakes; no Spring context in unit tests.
   `ApplicationContextTest` boots the full context to catch wiring mistakes.

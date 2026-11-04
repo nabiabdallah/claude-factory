@@ -36,7 +36,7 @@ Follow these stages in order. Do not skip a stage; stop and ask the user if one 
   never edit `ArchitectureTest` or delete a test to go green.
 - Run it yourself even though the Stop hook also does: the hook only acts on the project the session was
   started in.
-- **Mutation-check critical safeguards** (locking, lock order, transactions, idempotency, authorisation):
+- **Mutation-check critical safeguards** (locking, lock order, transactions, idempotency, authorisation and ownership checks):
   for each one, temporarily remove or break it in production code, run the matching tests, and confirm at
   least one fails; then restore the code and confirm it is byte-identical to before (keep a backup). A
   mutation must really remove the protection — e.g. locking in a *different but consistent* order is not a

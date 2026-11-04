@@ -22,26 +22,22 @@ validate the factory: don't port factory changes to it or build features on it u
 |---|---|---|
 | #2 Supply chain | Base image pinned to a digest; Actions pinned to SHAs; SBOM; Trivy image scan; cosign keyless signing and SBOM attestation (proven end to end on a throwaway repo); weekly base-image PR | ADR 0009, PR #2, factory-parent 1.3.0 |
 | Spring Boot 4.1 | factory-parent 2.0.0 (Boot 4.1.2, Spring 7, Tomcat 11, Jackson 3); scan runs with no exceptions | ADR 0010, PR #3 |
+| #5 Security defaults | https-only issuer (loopback http allowed), required `sub`, caller-isolation and per-caller idempotency checks in the spec template, reviewers and test-writer; java-pipeline 0.12.0 | ADR 0011, PR #4 |
 
 ### Waiting on the owner
-- Merge PR #3; then Claude tags and pushes `factory-parent-v2.0.0`, which publishes the parent.
-- Delete the throwaway repo `nabiabdallah/ci-signing-check` and its GHCR package, and revoke its token if one
-  was made for it.
+- Review and merge the #5 PR.
 - After 2.0.0 is published, Dependabot will open a parent-upgrade PR in payments-service that fails without
   the ADR 0010 code changes. Recommendation: close it, unless the owner wants payments-service upgraded.
 - #1 needs a choice: GitHub Pro (about $4/month), public repos, or an organization.
 - #4 needs a choice of stack: Prometheus + OpenTelemetry (default) or a vendor.
 
 ### Next, in the owner's approved order
-1. **#5 Security defaults.** Fail startup when the issuer URI isn't https (outside the local profile). Make the
-   reviewer agents check for one customer reaching another's data, the lesson from payments-service spec 0005. Add
-   guidance on scoping idempotency keys to the caller.
-2. **#3 Deploy safety.** The rolling update is hard-coded. Add a rule for migrations that can't run alongside the
+1. **#3 Deploy safety.** The rolling update is hard-coded. Add a rule for migrations that can't run alongside the
    old version, environment overlays, a PodDisruptionBudget, a NetworkPolicy, and a gate before deploying `:main`.
-3. **#6 Build hygiene.** Add Maven Enforcer to factory-parent (versions, banned dependencies) and a coverage floor.
-4. **#4 Observability.** Expose metrics and tracing (only health is exposed today), using the stack the owner picks.
-5. **#7 Factory as a product.** Plugin release tags, a changelog, and an onboarding guide.
-6. **#1 Repo guardrails.** Branch protection and secret scanning, once the plan choice above is made.
+2. **#6 Build hygiene.** Add Maven Enforcer to factory-parent (versions, banned dependencies) and a coverage floor.
+3. **#4 Observability.** Expose metrics and tracing (only health is exposed today), using the stack the owner picks.
+4. **#7 Factory as a product.** Plugin release tags, a changelog, and an onboarding guide.
+5. **#1 Repo guardrails.** Branch protection and secret scanning, once the plan choice above is made.
 
 ### After #7
 Each new pipeline plugin gets its own plan for the owner's OK:
@@ -51,6 +47,7 @@ Each new pipeline plugin gets its own plan for the owner's OK:
 Also planned: a standard intake step (idea → spec → owner approval).
 
 ## Working notes (this machine)
+- Sandbox commands leave empty dotfile placeholders (`.bashrc`, `.claude/`, …) in the repo root. Never stage them.
 - Maven Central often returns 502 through the sandbox proxy. Run Maven outside the sandbox
   (`source ~/.sdkman/bin/sdkman-init.sh; ./mvnw …`).
 - `gh` must run outside the sandbox, because its config directory is denied. Its token has no `read:packages` or
