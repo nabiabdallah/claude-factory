@@ -75,6 +75,13 @@ jobs:
           (cd "$out/ci-skeleton" && "$GITHUB_WORKSPACE/plugins/java-pipeline/skills/add-postgres/scripts/add-postgres.sh")
           (cd "$out/ci-payments-other" && "$GITHUB_WORKSPACE/plugins/java-pipeline/skills/add-postgres/scripts/add-postgres.sh")
 
+      # Deploy gate (factory ADR 0012) on a generated project with Postgres: mutable tags, commits not on main,
+      # and the migration rollout rule across promotions.
+      - name: Test check-deploy.sh (promotion gate) on a generated project
+        run: |
+          plugins/java-pipeline/templates/skeleton/.github/scripts/ci-tools.sh kubeconform
+          PATH="$RUNNER_TEMP/ci-bin:$PATH" ci/test-check-deploy.sh "$RUNNER_TEMP/projects/ci-skeleton"
+
       - name: Smoke-test add-resource-server (JWT via a local stand-in issuer; with and without Postgres)
         run: |
           out="$RUNNER_TEMP/projects"
@@ -90,21 +97,21 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install kubeconform (checksum-verified)
-        run: |
-          v=v0.6.7
-          base=https://github.com/yannh/kubeconform/releases/download/$v
-          curl -sSLO "$base/kubeconform-linux-amd64.tar.gz"
-          curl -sSLO "$base/CHECKSUMS"
-          grep ' kubeconform-linux-amd64.tar.gz$' CHECKSUMS | sha256sum -c -
-          mkdir -p "$RUNNER_TEMP/bin"
-          tar -xzf kubeconform-linux-amd64.tar.gz -C "$RUNNER_TEMP/bin" kubeconform
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Install kubeconform (the templates' pinned, checksum-verified version)
+        run: plugins/java-pipeline/templates/skeleton/.github/scripts/ci-tools.sh kubeconform
 
-      - name: Render (kustomize) and validate (kubeconform -strict)
+      - name: Render (kustomize) and validate (kubeconform -strict) every overlay, with and without Recreate
         run: |
           for t in skeleton payments-example; do
-            echo "== $t"
-            kubectl kustomize "plugins/java-pipeline/templates/$t/deploy/k8s" \
-              | kubeconform -strict -summary -kubernetes-version 1.31.0 -
+            k8s="plugins/java-pipeline/templates/$t/deploy/k8s"
+            for o in "$k8s"/overlays/*/; do
+              echo "== $t $(basename "$o")"
+              kubectl kustomize "$o" | kubeconform -strict -summary -kubernetes-version 1.31.0 -
+            done
+            tmp="$k8s/overlays/recreate-check"
+            mkdir "$tmp"
+            printf 'resources: [../prod]\ncomponents: [../../components/recreate]\n' > "$tmp/kustomization.yaml"
+            kubectl kustomize "$tmp" | tee "$RUNNER_TEMP/recreate.yaml" | kubeconform -strict -summary -kubernetes-version 1.31.0 -
+            grep -Eq '^ +type: Recreate$' "$RUNNER_TEMP/recreate.yaml"
+            rm -r "$tmp"
           done

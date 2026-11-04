@@ -38,13 +38,21 @@ Requires `jq` on your PATH (the plugin hooks parse their JSON input with it).
 
 - CI pushes `ghcr.io/nabiabdallah/<service>:<sha>` and `:main` on every push to `main` (Jib, distroless,
   non-root; no Docker needed). PRs only run `verify`.
-- `deploy/k8s/` is a Kustomize base (Deployment + Service, probes, hardened security context). Create the
-  database Secret once, then deploy:
+- `deploy/k8s/` (claude-factory ADR 0012): `base/` (Deployment, Service, PodDisruptionBudget, default-deny
+  NetworkPolicy), `overlays/staging` (1 replica) and `overlays/prod` (3), and `components/recreate`.
+  Once per cluster: create the namespace `<service>-<env>`, the database Secret in it, and label the ingress
+  controller's namespace `claude-factory/ingress=true` (the NetworkPolicy admits traffic only from there; it is
+  enforced only if the cluster's network plugin supports NetworkPolicy).
   ```bash
-  kubectl create secret generic <service>-db --from-literal=DB_URL=... --from-literal=DB_USERNAME=... --from-literal=DB_PASSWORD=...
-  kubectl apply -k deploy/k8s
+  kubectl -n <service>-prod create secret generic <service>-db --from-literal=DB_URL=... --from-literal=DB_USERNAME=... --from-literal=DB_PASSWORD=...
+  kubectl apply -k deploy/k8s/overlays/prod
   ```
-  Set the image tag in `deploy/k8s/kustomization.yaml` (`newTag`).
+- **Promote** = a PR that sets an overlay's `newTag` to a commit on `main` (CI pushed and signed its image).
+  Never `main` or `latest`. The PR review is the gate; `.github/scripts/check-deploy.sh` (CI job `manifests`)
+  rejects mutable tags, commits not on `main`, edited released migrations and rollbacks across a migration.
+- **Breaking migration** (`-- rollout: recreate`, see `CLAUDE.md`): the promotion that crosses it must add
+  `components: [../../components/recreate]` to the overlay (all old pods stop first: downtime), and the next
+  promotion must remove it. CI enforces both. Prefer expand/contract, which keeps the rolling update.
 - Build the image locally without pushing (needs network to gcr.io): `./mvnw -DskipTests package jib:buildTar`.
 
 ## Supply chain

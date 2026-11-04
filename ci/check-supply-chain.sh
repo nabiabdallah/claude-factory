@@ -22,7 +22,7 @@ base=$(sed -n 's|.*<factory.image.base>\(.*\)</factory.image.base>.*|\1|p' paren
 for t in plugins/java-pipeline/templates/*; do
   tools="$t/.github/scripts/ci-tools.sh"
   [[ -f "$tools" ]] || { problem "$t: no .github/scripts/ci-tools.sh"; continue; }
-  for tool in cosign trivy; do
+  for tool in cosign trivy kubeconform; do
     grep -qE "^${tool}_sha256=[0-9a-f]{64}$" "$tools" || problem "$tools: $tool has no pinned sha256"
   done
 done

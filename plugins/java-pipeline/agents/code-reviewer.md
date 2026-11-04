@@ -22,6 +22,9 @@ Review for:
   fail if the ownership check were removed?
 - **Idempotency keys**: stored and looked up per (caller, key); a test sends the same key from two callers
   and both get their own result.
+- **Rollout**: each new migration's `-- rollout:` header (if any) is true: "compatible" really leaves the
+  previous release working (it doesn't read a dropped/renamed column, insert without a new NOT NULL column, or
+  break a new constraint); "recreate" matches the spec's Rollout section. Released migrations unchanged.
 - **Tests**: do they assert behaviour, or just that code runs? Any test that would pass with the feature removed?
   For locking, transactions and idempotency, check the implementer's mutation results (see the new-feature
   skill, stage 5) and that concurrency tests force the overlap instead of relying on timing.
