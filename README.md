@@ -3,6 +3,8 @@
 Personal software factory: a Claude Code plugin marketplace whose plugins implement an
 agentic coding pipeline, plus the templates that new projects are created from.
 
+Status and next steps: [docs/ROADMAP.md](docs/ROADMAP.md).
+
 ## Layout
 
 ```
