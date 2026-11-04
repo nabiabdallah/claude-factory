@@ -42,6 +42,7 @@ targets=(
   "src/test/java/$pkg_path/support/IsolatedBootLogging.java"
   "src/test/java/$pkg_path/support/StartupGuardsTest.java"
   "src/test/java/$pkg_path/support/IdentityProviderTimeoutTest.java"
+  "src/test/java/$pkg_path/config/IdentityProviderTransportTest.java"
 )
 for t in "${targets[@]}"; do
   [[ ! -e "$t" ]] || die "$t already exists; refusing to overwrite"
@@ -63,6 +64,7 @@ put test/support/SecurityTest.java "${targets[4]}"
 put test/support/IsolatedBootLogging.java "${targets[5]}"
 put test/support/StartupGuardsTest.java "${targets[6]}"
 put test/support/IdentityProviderTimeoutTest.java "${targets[7]}"
+put test/config/IdentityProviderTransportTest.java "${targets[8]}"
 
 # The templates' ActuatorEndpointsTest expects 404 for unexposed endpoints without a token; behind the resource
 # server that request is a 401 first. Rewrite it into two exact cases (token → 404 proves "not exposed";

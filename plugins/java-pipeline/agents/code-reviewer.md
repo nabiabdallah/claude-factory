@@ -15,6 +15,13 @@ Review for:
 - **Failure handling**: timeouts on outbound calls, no swallowed exceptions, domain errors mapped to the right HTTP status, no partial state on failure.
 - **Idempotency & concurrency**: duplicate requests, concurrent debits on one account.
 - **Security**: input validation at the web boundary, no secrets in code/config, no PII or full account numbers in logs or exception messages.
+- **Caller isolation**: every read or change of a customer's data checks ownership against the caller from
+  the token (`Jwt#getSubject()` in the web adapter, passed in the command), never an id from the request. The
+  check runs before any other rule (no 422/409 that reveals someone else's balance or state); not-owned answers
+  like not-found; lists filtered by caller. Is there a test with a second caller for each path, and would one
+  fail if the ownership check were removed?
+- **Idempotency keys**: stored and looked up per (caller, key); a test sends the same key from two callers
+  and both get their own result.
 - **Tests**: do they assert behaviour, or just that code runs? Any test that would pass with the feature removed?
   For locking, transactions and idempotency, check the implementer's mutation results (see the new-feature
   skill, stage 5) and that concurrency tests force the overlap instead of relying on timing.

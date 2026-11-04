@@ -1,6 +1,7 @@
 package __PKG__.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -14,8 +15,9 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.io.support.SpringFactoriesLoader;
 
 /**
- * The service fails closed: it refuses to start without an issuer, with a blank issuer, or with a blank
- * audience (an empty audience list would switch Spring Boot's audience check off). The application is started
+ * The service fails closed: it refuses to start without an issuer, with a blank issuer, with an issuer reached
+ * over plain http on another host, or with a blank audience (an empty audience list would switch Spring Boot's
+ * audience check off). The application is started
  * by hand with the project's registered initializers, optionally without the test issuer.
  */
 class StartupGuardsTest {
@@ -78,5 +80,27 @@ class StartupGuardsTest {
                 .rootCause()
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("audience");
+    }
+
+    @Test
+    void does_not_start_with_a_plain_http_issuer_and_does_not_echo_credentials() {
+        assertThatThrownBy(() -> start(
+                        false, "--spring.security.oauth2.resourceserver.jwt.issuer-uri=http://user:s3cret@idp.example"))
+                .satisfies(e -> {
+                    var chain = new StringBuilder();
+                    for (Throwable t = e; t != null; t = t.getCause()) {
+                        chain.append(t.getMessage()).append('\n');
+                    }
+                    assertThat(chain.toString())
+                            .contains("AUTH_ISSUER_URI", "https", "idp.example")
+                            .doesNotContain("s3cret");
+                });
+    }
+
+    @Test
+    void starts_with_an_https_issuer() {
+        // The issuer is contacted on the first request, not at startup: an unreachable https issuer still starts.
+        assertThatCode(() -> start(false, "--spring.security.oauth2.resourceserver.jwt.issuer-uri=https://idp.invalid"))
+                .doesNotThrowAnyException();
     }
 }

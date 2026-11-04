@@ -37,6 +37,9 @@ template default.
 - The templates' `StructuredLoggingTest` re-runs Boot's logging initialization from its own context, so it no longer
   depends on test order; tests that start apps themselves use `IsolatedBootLogging`.
 
+## Amendment (0.12.0)
+https-only issuer, required `sub`, and caller-isolation review checks: see ADR 0011.
+
 ## Alternatives considered
 - **Auth in the skeleton by default** — every new app secure from day one, but tests and local runs need an
   issuer from the start and existing services still need the migration; kept as an explicit step.

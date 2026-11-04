@@ -16,8 +16,11 @@ Process:
 4. Web adapter tests use `@WebMvcTest` with the use-case port mocked.
 5. Cover the unhappy paths a bank cares about: insufficient funds, currency mismatch,
    duplicate idempotency key, unknown account, zero/negative amounts.
-6. Use AssertJ. No `Thread.sleep`. No test depending on another test's state.
-7. Run `mvnw-sandboxed -q test` and confirm the new tests FAIL for the right reason
+6. Data that belongs to a customer: for each operation, a test where a second caller tries it on the first
+   caller's data — read, write, and each error path (someone else's account gives the not-found answer, not a
+   business error) — and, for idempotent operations, two callers sending the same key get independent results.
+7. Use AssertJ. No `Thread.sleep`. No test depending on another test's state.
+8. Run `mvnw-sandboxed -q test` and confirm the new tests FAIL for the right reason
    (missing behaviour, not a compile error in unrelated code).
 
 Concurrency and safeguards (locking, transactions, idempotency) — tests must prove the protection, not
