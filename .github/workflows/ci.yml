@@ -45,6 +45,12 @@ jobs:
           ls -l target/jib-image.tar
 
       # Supply chain (factory ADR 0009): pins, SBOM, and the same image scan the templates run.
+      - name: Release notes (changelog section for every version), their tests, docs links
+        run: |
+          ci/check-release-notes.sh
+          ci/test-release-notes.sh
+          ci/check-docs.sh
+
       - name: Supply-chain checks (SHA-pinned actions, base digest, pinned tools, SBOM)
         run: ci/check-supply-chain.sh plugins/java-pipeline/templates/skeleton
 
@@ -68,6 +74,13 @@ jobs:
           "$script" ci-skeleton-nested com.example.app.core "$out"
           "$script" --template payments-example ci-payments-same com.example.payments "$out"
           "$script" --template payments-example ci-payments-other com.acme.ledger.core "$out"
+          # Pinned to the plugin version that created it (factory ADR 0015).
+          version=$(jq -r .version plugins/java-pipeline/.claude-plugin/plugin.json)
+          for p in ci-skeleton ci-payments-same; do
+            jq -e --arg ref "java-pipeline-v$version" '.extraKnownMarketplaces["claude-factory"].source
+              | .ref == $ref and .repo == "nabiabdallah/claude-factory" and .sparsePaths == [".claude-plugin", "plugins"]' \
+              "$out/$p/.claude/settings.json"
+          done
 
       - name: Smoke-test add-postgres (embedded Postgres, Flyway, transactions)
         run: |

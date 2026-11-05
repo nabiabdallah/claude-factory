@@ -36,6 +36,10 @@ jobs:
           echo "pom=$pom_version tag=$tag_version"
           [ "$pom_version" = "$tag_version" ] || { echo "::error::tag $GITHUB_REF_NAME does not match pom version $pom_version"; exit 1; }
 
+      - name: Changelog has this version (factory ADR 0015)
+        working-directory: ${{ github.workspace }}
+        run: ci/check-release-notes.sh --tag "$GITHUB_REF_NAME"
+
       - name: Deploy to GitHub Packages
         run: ./mvnw -B deploy
         env:

@@ -1,0 +1,32 @@
+name: Release java-pipeline
+
+# Release the plugin (factory ADR 0015): bump "version" in plugins/java-pipeline/.claude-plugin/plugin.json and add
+# its section to plugins/java-pipeline/CHANGELOG.md in the PR, merge, then tag the merge commit:
+#   git tag java-pipeline-v0.16.0 && git push origin java-pipeline-v0.16.0
+# Projects pin that tag ("ref" in .claude/settings.json), so a tag is never moved or reused.
+on:
+  push:
+    tags: ['java-pipeline-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # create the GitHub Release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Tag matches plugin.json and the changelog has its section
+        run: ci/check-release-notes.sh --tag "$GITHUB_REF_NAME"
+
+      - name: Create the GitHub Release from the changelog section
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ci/check-release-notes.sh --notes "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/notes.md"

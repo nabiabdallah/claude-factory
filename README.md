@@ -3,7 +3,9 @@
 Personal software factory: a Claude Code plugin marketplace whose plugins implement an
 agentic coding pipeline, plus the templates that new projects are created from.
 
-Status and next steps: [docs/ROADMAP.md](docs/ROADMAP.md).
+New here? [docs/ONBOARDING.md](docs/ONBOARDING.md) goes from an empty machine to a deployed change.
+Status and next steps: [docs/ROADMAP.md](docs/ROADMAP.md). Changes: [plugin](plugins/java-pipeline/CHANGELOG.md),
+[factory-parent](parents/factory-parent/CHANGELOG.md).
 
 ## Layout
 
@@ -12,6 +14,7 @@ claude-factory/
 ├── .claude-plugin/marketplace.json      marketplace "claude-factory"
 ├── plugins/java-pipeline/
 │   ├── .claude-plugin/plugin.json       plugin manifest (version lives here)
+│   ├── CHANGELOG.md                     one section per release (tag java-pipeline-vX.Y.Z)
 │   ├── agents/                          architect-reviewer, test-writer, code-reviewer
 │   ├── skills/                          new-feature, write-adr, new-project, add-postgres, add-resource-server
 │   ├── hooks/                           hooks.json, format-java.sh, verify-gate.sh
@@ -20,7 +23,9 @@ claude-factory/
 │       ├── skeleton/                    default: empty hexagonal service
 │       └── payments-example/            the original payments starter, as a worked example
 ├── parents/factory-parent/             shared Maven build every service inherits (GitHub Packages)
+├── docs/ONBOARDING.md                   empty machine → deployed change
 ├── docs/factory-adr/                    decisions about the factory itself
+├── ci/                                 factory CI checks (supply chain, deploy gate, build rules, releases, docs)
 └── README.md
 ```
 
@@ -65,24 +70,9 @@ Stop runs `./mvnw verify` when Java/POM files changed and blocks finishing while
 Services inherit `io.github.nabiabdallah.factory:factory-parent`, published to GitHub Packages in
 this repo (see `docs/factory-adr/0003-shared-parent-pom-on-github-packages.md`).
 
-**One-time setup on a machine:**
-1. Create a classic personal access token with only `read:packages`.
-2. Put it in `~/.m2/settings.xml` (`chmod 600`):
-   ```xml
-   <settings><servers><server>
-     <id>github</id><username>nabiabdallah</username><password>TOKEN</password>
-   </server></servers></settings>
-   ```
-3. Allow `maven.pkg.github.com` and `github-registry-files.githubusercontent.com` (where GitHub serves the
-   package files) in the sandbox: `sandbox.network.allowedDomains` in `~/.claude/settings.json`.
+Machine setup (read token, sandbox domains) and the per-repo secrets: [ONBOARDING.md](docs/ONBOARDING.md), steps 2 and 5.
 
-**Per service repo on GitHub:** add the same token as the secret `FACTORY_PACKAGES_TOKEN`
-(`gh secret set FACTORY_PACKAGES_TOKEN --repo <owner>/<service>`); the service's CI reads it.
-
-**Release a new parent:** bump `<version>` in `parents/factory-parent/pom.xml`, update the templates'
-`<parent><version>`, commit, push, then `git tag factory-parent-vX.Y.Z && git push origin factory-parent-vX.Y.Z`.
-`publish-parent.yml` checks the tag matches the pom and deploys. Services pick it up by bumping their
-parent version.
+**Release a new parent:** see [Releases](#releases).
 
 ## Images and Kubernetes
 
@@ -104,11 +94,7 @@ in factory CI; `base-image.yml` opens a weekly PR when distroless publishes a ne
 
 Every repo has `.github/dependabot.yml` (the templates carry it to new services): weekly PRs, minor/patch
 grouped, majors separate, all through normal CI (ADR 0005). Each repo needs the **Dependabot** secret
-`FACTORY_PACKAGES_TOKEN` (same `read:packages` token; separate from the Actions secret):
-
-```bash
-gh secret set FACTORY_PACKAGES_TOKEN --app dependabot --repo nabiabdallah/<repo>
-```
+`FACTORY_PACKAGES_TOKEN` as well as the Actions one ([ONBOARDING.md](docs/ONBOARDING.md), step 5).
 
 Spring Boot or plugin bump: Dependabot PR on `factory-parent` → merge → tag a new parent → Dependabot
 opens a parent-version PR in every service.
@@ -121,14 +107,21 @@ Enforcer at `validate` (Java 21+, Maven 3.9+, pinned plugins, no SNAPSHOT or ban
 compiled for Java 22+) and a JaCoCo coverage floor at `verify` (80% lines, 70% branches; a service may raise it,
 not lower it). A service that misses either fails on the upgrade PR: add tests or drop the dependency.
 
-## Update
+## Releases
 
-- **Local directory marketplace**: Claude Code reads the plugin in place. Edits take effect at
-  the next session start or after `/reload-plugins`; no version bump needed.
-- **GitHub marketplace**: bump `version` in `plugins/java-pipeline/.claude-plugin/plugin.json`
-  for every release, commit, tag (`java-pipeline-vX.Y.Z`) and push. Users pick it up with
-  `claude plugin marketplace update claude-factory` (then `/reload-plugins` or a new session).
-  Without a version bump, installed copies stay on the old version.
+Both components use semver tags and a Keep a Changelog file; `ci/check-release-notes.sh` fails any PR whose
+version and newest changelog section disagree (ADR 0015). Tags are never moved or reused.
+
+- **java-pipeline:** bump `version` in `plugins/java-pipeline/.claude-plugin/plugin.json` and add its section to
+  `plugins/java-pipeline/CHANGELOG.md` (with an **Upgrading** note if projects must act) in the PR. After merge:
+  `git tag java-pipeline-vX.Y.Z && git push origin java-pipeline-vX.Y.Z`. `release-plugin.yml` checks the tag and
+  creates the GitHub Release from the changelog section. New projects pin the tag (`ref` in their
+  `.claude/settings.json`); existing ones move by bumping it. With the local directory marketplace, edits take
+  effect at the next session or `/reload-plugins`.
+- **factory-parent:** bump `<version>` in `parents/factory-parent/pom.xml`, update the templates'
+  `<parent><version>`, add the section to `parents/factory-parent/CHANGELOG.md`. After merge:
+  `git tag factory-parent-vX.Y.Z && git push origin factory-parent-vX.Y.Z`. `publish-parent.yml` checks the tag
+  and the changelog and deploys to GitHub Packages; Dependabot then opens upgrade PRs in services.
 
 ## Develop
 
