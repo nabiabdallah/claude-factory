@@ -8,6 +8,10 @@ code, docs and project permissions.
 
 ## First run
 
+The whole path (machine setup, GitHub repo and secrets, deploy, upgrades) is in claude-factory's
+`docs/ONBOARDING.md`. This project is pinned to the java-pipeline release that created it (`ref` in
+`.claude/settings.json`); upgrade by bumping it after reading the plugin's CHANGELOG.
+
 The build inherits `factory-parent` from GitHub Packages, so Maven needs a read token: a
 `<server id="github">` in `~/.m2/settings.xml`, and for CI the repo secret `FACTORY_PACKAGES_TOKEN`
 (classic PAT with only `read:packages`). See the claude-factory README, "Shared build".

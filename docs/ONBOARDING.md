@@ -1,0 +1,131 @@
+# Onboarding: from an empty machine to a deployed change
+
+Each step has the command and a check that it worked. Paths assume the factory is cloned to
+`~/dev/factory/claude-factory` and projects live in `~/dev/projects`. Decisions behind each step are in
+[factory-adr](factory-adr/); what's next for the factory is in [ROADMAP.md](ROADMAP.md).
+
+## 1. Machine prerequisites (once)
+
+| Tool | Install | Check |
+|---|---|---|
+| Java 21 | `curl -s https://get.sdkman.io \| bash`, then `sdk install java 21-tem` | `java -version` → 21 |
+| jq (the plugin hooks parse JSON with it) | your package manager | `jq --version` |
+| GitHub CLI | your package manager, then `gh auth login` | `gh auth status` |
+| Claude Code | see claude.com/claude-code | `claude --version` |
+
+No global Maven: every project has `./mvnw`. No Docker: tests use an embedded Postgres, images are built by Jib in CI.
+
+## 2. Read access to the shared build (once)
+
+Services inherit `factory-parent` from GitHub Packages ([ADR 0003](factory-adr/0003-shared-parent-pom-on-github-packages.md)).
+
+1. Create a classic personal access token with only `read:packages`.
+2. Put it in `~/.m2/settings.xml`, then `chmod 600 ~/.m2/settings.xml`:
+   ```xml
+   <settings><servers><server>
+     <id>github</id><username>nabiabdallah</username><password>TOKEN</password>
+   </server></servers></settings>
+   ```
+3. Allow `maven.pkg.github.com` and `github-registry-files.githubusercontent.com` (where GitHub serves the package
+   files) in the Claude Code sandbox: `sandbox.network.allowedDomains` in `~/.claude/settings.json`.
+
+**Check:** in the factory, `cd plugins/java-pipeline/templates/skeleton && ./mvnw -q validate` succeeds (it
+resolves the parent from GitHub Packages).
+
+## 3. Install the plugin (once)
+
+```bash
+claude plugin marketplace add nabiabdallah/claude-factory   # or the local clone: ~/dev/factory/claude-factory
+claude plugin install java-pipeline@claude-factory
+```
+
+**Check:** `claude plugin list` shows `java-pipeline@claude-factory` enabled; `claude plugin details java-pipeline`
+lists the skills, agents and hooks.
+
+## 4. Create a service
+
+In a Claude Code session:
+
+```
+/java-pipeline:new-project customer-service com.example.customers
+```
+
+It copies the skeleton template (or `--template payments-example`), renames packages and the artifact, runs
+`./mvnw verify` and makes the first commit. The project's `.claude/settings.json` pins the plugin to the release
+that created it (`"ref": "java-pipeline-vX.Y.Z"`, [ADR 0015](factory-adr/0015-releases-and-pinned-plugin.md)).
+
+**Check:** `cd ~/dev/projects/customer-service && ./mvnw verify` is green; `claude` there offers to install or
+enable the plugin if it's missing.
+
+## 5. Put it on GitHub
+
+```bash
+gh repo create nabiabdallah/customer-service --private --source . --push
+gh secret set FACTORY_PACKAGES_TOKEN --repo nabiabdallah/customer-service                    # Actions
+gh secret set FACTORY_PACKAGES_TOKEN --app dependabot --repo nabiabdallah/customer-service   # Dependabot
+```
+
+Both secrets hold the same `read:packages` token. In the repo, turn on **Settings → Actions → General → Allow
+GitHub Actions to create and approve pull requests** if you want bot-opened PRs (the factory's base-image PR
+needs it).
+
+**Check:** the first CI run on `main` is green: `verify` (tests, ArchUnit, Enforcer, coverage floor, Spotless),
+the image scan, `manifests` (deploy gate), and `image` (pushes `ghcr.io/nabiabdallah/customer-service:<sha>`,
+signed with cosign).
+
+## 6. Optional capabilities
+
+Each runs once, from the project root, on a clean branch, and leaves its changes uncommitted for review:
+
+```
+/java-pipeline:add-postgres          # Postgres + Flyway + JdbcClient; embedded Postgres in tests
+/java-pipeline:add-resource-server   # OAuth2/JWT: AUTH_ISSUER_URI (https), <service>:read / :write scopes
+```
+
+**Check:** the skill ends with `./mvnw verify green`. add-postgres may print an ArchUnit rule for you to add to
+`ArchitectureTest` (agents may not edit that file).
+
+## 7. Build a feature
+
+```
+/java-pipeline:new-feature Add GET /customers/{id}. Write the spec first.
+```
+
+The pipeline: a spec in `docs/specs/` (you approve it) → plan → architect-reviewer → failing tests (test-writer)
+→ implementation → `./mvnw verify` (the Stop hook won't let the session finish while it's red) → code-reviewer →
+PR. You approve the spec and the plan, and you merge.
+
+## 8. Deploy
+
+Once per cluster ([ADR 0012](factory-adr/0012-deploy-safety.md), [ADR 0014](factory-adr/0014-observability-prometheus-otel.md)):
+- namespaces `customer-service-staging` and `customer-service-prod`;
+- the database Secret `customer-service-db` in each (`DB_URL`, `DB_USERNAME`, `DB_PASSWORD`), if you added Postgres;
+- label the ingress controller's namespace `claude-factory/ingress=true`, and Prometheus' and the OpenTelemetry
+  Collector's namespace `claude-factory/monitoring=true`;
+- set the Collector address in `deploy/k8s/base/deployment.yaml` (placeholder `otel-collector.monitoring:4318`).
+
+Promote with a PR that sets `newTag` in `deploy/k8s/overlays/<env>/kustomization.yaml` to a commit on `main`; CI
+(`manifests`) checks it. Then `kubectl apply -k deploy/k8s/overlays/<env>`. A release that crosses a
+`-- rollout: recreate` migration needs `components/recreate` in that overlay (CI tells you).
+
+**Check:** `kubectl -n customer-service-staging rollout status deployment/customer-service`.
+
+## 9. Upgrading a service
+
+- **Plugin:** read [the plugin changelog](../plugins/java-pipeline/CHANGELOG.md) (especially **Upgrading**), then
+  set `ref` in `.claude/settings.json` to the new `java-pipeline-vX.Y.Z` and start a new session. Template changes
+  (CI, manifests, tests) don't reach existing services by themselves; the changelog says what to copy.
+- **Shared build:** Dependabot opens a PR when a new `factory-parent` is published; read
+  [its changelog](../parents/factory-parent/CHANGELOG.md) before merging.
+
+## Troubleshooting (this machine: WSL + the Claude Code sandbox)
+
+- **Maven Central returns 502 through the sandbox proxy.** Run Maven outside the sandbox:
+  `source ~/.sdkman/bin/sdkman-init.sh; ./mvnw …`.
+- **`gh` fails inside the sandbox.** Its config directory is denied; run it outside. Its token has no
+  `read:packages` or `delete_repo` scope, so check private GHCR images from a workflow in the repo.
+- **Downloads from `release-assets.githubusercontent.com` fail.** Trivy and cosign run only in CI. Get a release
+  asset's sha256 with `gh api repos/<o>/<r>/releases/tags/<t> --jq '.assets[]|.digest'`.
+- **A PR opened by Actions with `GITHUB_TOKEN` didn't start CI.** That's GitHub's rule; close and reopen it.
+- **Empty dotfiles (`.bashrc`, `.claude/`, …) appear in the repo root.** Sandbox placeholders: never stage them
+  (stage by path, never `git add -A`).

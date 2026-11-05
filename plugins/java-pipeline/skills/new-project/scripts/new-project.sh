@@ -94,6 +94,20 @@ if [[ "$pkg" != *"$old_pkg"* ]] && grep -rIq --exclude-dir=.git --exclude-dir=ta
   die "leftover references to $old_pkg after rename"
 fi
 
+# Pin the plugin marketplace to the release that created this project (factory ADR 0015): the project keeps the
+# agents, skills and hooks its tests were written for until someone bumps the ref.
+plugin_version="$(sed -n 's/^ *"version": "\(.*\)",$/\1/p' "$script_dir/../../../.claude-plugin/plugin.json" | head -n 1)"
+[[ -n "$plugin_version" ]] || die "could not read the plugin version"
+python3 -I - .claude/settings.json "java-pipeline-v${plugin_version}" <<'PY'
+import json, sys
+path, ref = sys.argv[1], sys.argv[2]
+settings = json.load(open(path))
+source = settings["extraKnownMarketplaces"]["claude-factory"]["source"]
+source["ref"] = ref
+source["sparsePaths"] = [".claude-plugin", "plugins"]
+open(path, "w").write(json.dumps(settings, indent=2) + "\n")
+PY
+
 # Find Java if the session was started without it (e.g. SDKMAN installed later).
 if [[ -z "${JAVA_HOME:-}" ]] && ! command -v java >/dev/null 2>&1 && [[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]]; then
   set +u; source "$HOME/.sdkman/bin/sdkman-init.sh"; set -u

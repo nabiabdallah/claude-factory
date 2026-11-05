@@ -25,17 +25,17 @@ validate the factory: don't port factory changes to it or build features on it u
 | #5 Security defaults | https-only issuer (loopback http allowed), required `sub`, caller-isolation and per-caller idempotency checks in the spec template, reviewers and test-writer; java-pipeline 0.12.0 | ADR 0011, PR #4 |
 | #3 Deploy safety | Base + staging/prod overlays pinned to commits on `main` (`newTag: unreleased` until promoted); promotion = PR, checked by `check-deploy.sh` (kubeconform, commit on main, migration rollout rule with a `recreate` component); `MigrationRolloutTest` in add-postgres; PDB `maxUnavailable: 1`; default-deny NetworkPolicy; java-pipeline 0.13.0 | ADR 0012, PR #5 |
 | #6 Build hygiene | Maven Enforcer in factory-parent (Java 21+, Maven 3.9+, pinned plugins, no SNAPSHOT/banned/Java-22+ dependencies); JaCoCo floor 80% lines / 70% branches, raise-only; factory-parent 2.1.0, java-pipeline 0.14.0 | ADR 0013, PR #6, factory-parent 2.1.0 published |
-| #4 Observability | Actuator on management port 8081 (probes, `/actuator/prometheus`), Prometheus metrics with latency histograms, OpenTelemetry traces over OTLP (staging 100%, prod 10%), raw URLs stripped from spans, trace ids in logs; NetworkPolicy opens metrics/OTLP only to `claude-factory/monitoring` namespaces; java-pipeline 0.15.0 | ADR 0014, PR (this step) |
+| #4 Observability | Actuator on management port 8081 (probes, `/actuator/prometheus`), Prometheus metrics with latency histograms, OpenTelemetry traces over OTLP (staging 100%, prod 10%), raw URLs stripped from spans, trace ids in logs; NetworkPolicy opens metrics/OTLP only to `claude-factory/monitoring` namespaces; java-pipeline 0.15.0 | ADR 0014, PR #7 |
+| #7 Factory as a product | Release tags `java-pipeline-vX.Y.Z` with GitHub Releases; new projects pinned to their plugin release (`ref`, `sparsePaths`); changelogs for the plugin and factory-parent, checked on every PR and release; `docs/ONBOARDING.md`; docs link check; java-pipeline 0.16.0 | ADR 0015, PR (this step) |
 
 ### Waiting on the owner
-- Review and merge the #4 PR.
+- Review and merge the #7 PR, then tag `java-pipeline-v0.16.0` (owner-approved).
 - After 2.0.0 is published, Dependabot will open a parent-upgrade PR in payments-service that fails without
   the ADR 0010 code changes. Recommendation: close it, unless the owner wants payments-service upgraded.
 - #1 needs a choice: GitHub Pro (about $4/month), public repos, or an organization.
 
 ### Next, in the owner's approved order
-1. **#7 Factory as a product.** Plugin release tags, a changelog, and an onboarding guide.
-2. **#1 Repo guardrails.** Branch protection and secret scanning, once the plan choice above is made. Branch
+1. **#1 Repo guardrails.** Branch protection and secret scanning, once the plan choice above is made. Branch
    protection is what makes the #3 promotion-PR review mechanically required.
 
 ### After #7
@@ -46,11 +46,4 @@ Each new pipeline plugin gets its own plan for the owner's OK:
 Also planned: a standard intake step (idea → spec → owner approval).
 
 ## Working notes (this machine)
-- Sandbox commands leave empty dotfile placeholders (`.bashrc`, `.claude/`, …) in the repo root. Never stage them.
-- Maven Central often returns 502 through the sandbox proxy. Run Maven outside the sandbox
-  (`source ~/.sdkman/bin/sdkman-init.sh; ./mvnw …`).
-- `gh` must run outside the sandbox, because its config directory is denied. Its token has no `read:packages` or
-  `delete_repo` scope, so check private GHCR images in a workflow in the repo.
-- This machine can't download from release-assets.githubusercontent.com, so Trivy and cosign run only in CI. Get
-  release asset sha256 values with `gh api repos/<o>/<r>/releases/tags/<t> --jq '.assets[]|.digest'`.
-- Pull requests opened by Actions with `GITHUB_TOKEN` don't start CI. Close and reopen them.
+Moved to the troubleshooting section of [ONBOARDING.md](ONBOARDING.md#troubleshooting-this-machine-wsl--the-claude-code-sandbox).
