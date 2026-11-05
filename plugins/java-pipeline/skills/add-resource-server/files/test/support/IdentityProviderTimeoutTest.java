@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.annotation.DirtiesContext;
 
@@ -29,6 +30,9 @@ class IdentityProviderTimeoutTest {
     @LocalServerPort
     int port;
 
+    @LocalManagementPort
+    int managementPort;
+
     private final HttpClient http =
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
@@ -38,7 +42,11 @@ class IdentityProviderTimeoutTest {
     }
 
     private HttpResponse<String> get(String path, String authorization) throws Exception {
-        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path)).timeout(BOUND);
+        return get(port, path, authorization);
+    }
+
+    private HttpResponse<String> get(int onPort, String path, String authorization) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + onPort + path)).timeout(BOUND);
         if (authorization != null) {
             request.header("Authorization", authorization);
         }
@@ -57,7 +65,8 @@ class IdentityProviderTimeoutTest {
             }
         });
 
-        assertThat(get("/actuator/health/liveness", null).statusCode()).isEqualTo(200);
+        assertThat(get(managementPort, "/actuator/health/liveness", null).statusCode())
+                .isEqualTo(200);
 
         var response = pending.get(BOUND.toSeconds(), TimeUnit.SECONDS);
         assertThat(response.statusCode()).as("refused, never served").isEqualTo(401);

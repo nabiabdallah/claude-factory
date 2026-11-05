@@ -55,7 +55,10 @@ public class SecurityConfig {
                 .formLogin(form -> form.disable())
                 .logout(logout -> logout.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth.requestMatchers("/actuator/health", "/actuator/health/**")
+                // Probes and Prometheus need no token. Actuator is served only on the management port (factory
+                // ADR 0014), which the NetworkPolicy opens to the monitoring namespace alone.
+                .authorizeHttpRequests(auth -> auth.requestMatchers(
+                                "/actuator/health", "/actuator/health/**", "/actuator/prometheus")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/**")
                         .hasAuthority(READ)

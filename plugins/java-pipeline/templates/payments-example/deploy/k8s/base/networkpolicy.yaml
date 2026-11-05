@@ -1,9 +1,11 @@
 # Default deny in both directions, then allow only what the service needs (claude-factory ADR 0012).
 # Enforced only if the cluster's network plugin supports NetworkPolicy.
 # - In: the http port, from namespaces labelled claude-factory/ingress=true (label your ingress controller's
-#   namespace). Kubelet health probes come from the node and are not subject to this policy.
-# - Out: DNS in kube-system; TCP 443 (identity provider) and 5432 (Postgres) to any address. Narrow these to
-#   your issuer's and database's addresses once they are known.
+#   namespace); the management port (metrics), from namespaces labelled claude-factory/monitoring=true (label
+#   Prometheus' namespace). Kubelet health probes come from the node and are not subject to this policy.
+# - Out: DNS in kube-system; OTLP (4317/4318) to claude-factory/monitoring namespaces (the Collector); TCP 443
+#   (identity provider) and 5432 (Postgres) to any address. Narrow these to your issuer's and database's
+#   addresses once they are known.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -21,6 +23,13 @@ spec:
       ports:
         - port: http
           protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              claude-factory/monitoring: "true"
+      ports:
+        - port: management
+          protocol: TCP
   egress:
     - to:
         - namespaceSelector:
@@ -30,6 +39,15 @@ spec:
         - port: 53
           protocol: UDP
         - port: 53
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              claude-factory/monitoring: "true"
+      ports:
+        - port: 4317
+          protocol: TCP
+        - port: 4318
           protocol: TCP
     - ports:
         - port: 443

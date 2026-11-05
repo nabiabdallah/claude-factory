@@ -10,7 +10,8 @@ chosen yet, so the service must work with any OIDC/OAuth2 issuer, and tests must
 
 ## Decision
 - Spring Security OAuth2 resource server with JWT. Every request needs a valid token except
-  `/actuator/health/**` (Kubernetes probes). Stateless: no session, no cookies, CSRF off, no basic/form login.
+  `/actuator/health/**` (Kubernetes probes) and `/actuator/prometheus`, both served only on the management port
+  (claude-factory ADR 0014). Stateless: no session, no cookies, CSRF off, no basic/form login.
 - Token checks: signature against the issuer's published keys, issuer = `AUTH_ISSUER_URI`, audience =
   `AUTH_AUDIENCE` (default `__SVC__`), expiry, and a usable `sub` (present, not blank, ≤ 255 chars, no control
   characters; per-caller rules depend on it). Without `AUTH_ISSUER_URI` the service does not start.

@@ -9,7 +9,8 @@ Pipeline (agents, skills, hooks) comes from the `java-pipeline` plugin — not f
 - One test class: `mvnw-sandboxed -q test -Dtest=TransferMoneyServiceTest`
 - Format: `mvnw-sandboxed -q spotless:apply`
 - Run locally: `./mvnw spring-boot:run -Dspring-boot.run.profiles=local` (plain-text logs; default is ECS JSON)
-- Health: `/actuator/health/liveness`, `/actuator/health/readiness` (only health is exposed)
+- Actuator on management port 8081 only: probes `/actuator/health/liveness|readiness`, `/actuator/prometheus`.
+  Metrics/spans use URI templates, never raw paths; don't add raw ids as tags or span attributes (ADR 0014).
 
 - Image: built and pushed by CI on `main` only (Jib); don't add a Dockerfile. Manifests: `deploy/k8s/` (base +
   `overlays/staging|prod`); deploying = a PR setting an overlay's `newTag` to a commit on `main`. Never `main`/`latest`.
