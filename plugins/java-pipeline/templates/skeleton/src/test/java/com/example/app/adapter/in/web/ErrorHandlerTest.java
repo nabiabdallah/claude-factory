@@ -11,16 +11,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.example.app.domain.DomainException;
 import com.example.app.domain.NotFoundException;
 import com.jayway.jsonpath.JsonPath;
+import java.net.URI;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.ErrorResponseException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.ServletWebRequest;
 
 @ExtendWith(OutputCaptureExtension.class)
 class ErrorHandlerTest {
@@ -47,6 +54,11 @@ class ErrorHandlerTest {
                 case "missing" -> throw new ThingNotFoundException();
                 case "rule" -> throw new RuleViolatedException();
                 case "boom" -> throw new IllegalStateException("boom");
+                case "own-instance" -> {
+                    var problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+                    problem.setInstance(URI.create("urn:example:conflict-1"));
+                    throw new ErrorResponseException(HttpStatus.CONFLICT, problem, null);
+                }
                 default -> {
                     return "ok";
                 }
@@ -107,5 +119,23 @@ class ErrorHandlerTest {
         assertThat(output)
                 .contains("Unhandled exception errorId=" + errorId)
                 .contains("java.lang.IllegalStateException: boom");
+    }
+
+    @Test
+    void a_problem_that_already_has_an_instance_keeps_it() throws Exception {
+        mvc.perform(get("/probe/{id}/own-instance", SECRET_ID))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.instance").value("urn:example:conflict-1"));
+    }
+
+    @Test
+    void a_body_that_is_not_a_problem_passes_through_unchanged() {
+        var request = new ServletWebRequest(new MockHttpServletRequest());
+
+        var response = new ErrorHandler()
+                .createResponseEntity("plain body", new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isEqualTo("plain body");
     }
 }
