@@ -29,8 +29,17 @@ Requires `jq` on your PATH (the plugin hooks parse their JSON input with it).
 
 ## Runtime
 
-- Health for Kubernetes: `/actuator/health/liveness` and `/actuator/health/readiness`; no other Actuator
-  endpoint is exposed and health shows no details.
+- Actuator runs on its own **management port 8081** (claude-factory ADR 0014); port 8080 serves only the API.
+  There: Kubernetes probes `/actuator/health/liveness|readiness` (no details) and `/actuator/prometheus`.
+  Nothing else is exposed.
+- **Metrics:** Prometheus scrapes pods by the `prometheus.io/*` annotations; `http_server_requests_seconds`
+  has latency histograms, tagged by URI template (`/accounts/{id}`), never the raw path.
+- **Traces:** OpenTelemetry over OTLP to a Collector (placeholder `otel-collector.monitoring:4318`, set in
+  `deploy/k8s/base/deployment.yaml`); sampling 100% in staging, 10% in prod; W3C `traceparent` in and out.
+  Raw request URLs are removed from spans (`config/ObservabilityConfig`). Logs carry `traceId`/`spanId`.
+  Locally nothing is exported unless you set `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT`.
+- Cluster: label Prometheus' and the Collector's namespace `claude-factory/monitoring=true`; the
+  NetworkPolicy admits the management port and OTLP only from/to there.
 - Logs are ECS JSON by default; run locally with plain text:
   `./mvnw spring-boot:run -Dspring-boot.run.profiles=local`.
 - Graceful shutdown: in-flight requests get up to 20s when the pod stops.

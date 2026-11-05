@@ -9,6 +9,22 @@ resources:
 replicas:
   - name: payments-starter
     count: 1
+# Trace sampling and the environment name on every span (ADR 0014).
+patches:
+  - target:
+      kind: Deployment
+      name: payments-starter
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: MANAGEMENT_TRACING_SAMPLING_PROBABILITY
+          value: "1.0"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: OTEL_RESOURCE_ATTRIBUTES
+          value: deployment.environment.name=staging
 images:
   - name: ghcr.io/nabiabdallah/payments-starter
     newTag: unreleased

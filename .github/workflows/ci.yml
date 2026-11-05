@@ -105,13 +105,19 @@ jobs:
       - name: Install kubeconform (the templates' pinned, checksum-verified version)
         run: plugins/java-pipeline/templates/skeleton/.github/scripts/ci-tools.sh kubeconform
 
-      - name: Render (kustomize) and validate (kubeconform -strict) every overlay, with and without Recreate
+      - name: Render (kustomize) and validate (kubeconform -strict) every overlay, with and without Recreate; observability wiring
         run: |
           for t in skeleton payments-example; do
             k8s="plugins/java-pipeline/templates/$t/deploy/k8s"
             for o in "$k8s"/overlays/*/; do
               echo "== $t $(basename "$o")"
-              kubectl kustomize "$o" | kubeconform -strict -summary -kubernetes-version 1.31.0 -
+              kubectl kustomize "$o" > "$RUNNER_TEMP/rendered.yaml"
+              kubeconform -strict -summary -kubernetes-version 1.31.0 - < "$RUNNER_TEMP/rendered.yaml"
+              # Observability (factory ADR 0014): 3 probes + the NetworkPolicy rule on the management port,
+              # which only monitoring namespaces may reach (metrics in, OTLP out).
+              test "$(grep -cE '^ *(- )?port: management$' "$RUNNER_TEMP/rendered.yaml")" -eq 4
+              test "$(grep -c 'claude-factory/monitoring: "true"' "$RUNNER_TEMP/rendered.yaml")" -eq 2
+              grep -q 'MANAGEMENT_TRACING_SAMPLING_PROBABILITY' "$RUNNER_TEMP/rendered.yaml"
             done
             tmp="$k8s/overlays/recreate-check"
             mkdir "$tmp"

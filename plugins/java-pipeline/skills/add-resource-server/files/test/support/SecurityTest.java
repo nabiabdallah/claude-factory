@@ -13,7 +13,10 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** The token checks and the default scope rule, through the real filter chain and a real JWT decoder. */
+/**
+ * The token checks and the default scope rule, through the real filter chain and a real JWT decoder. Probes and
+ * Prometheus (no token, management port) are covered by runtime/ActuatorEndpointsTest and ObservabilityTest.
+ */
 @SpringBootTest
 @AutoConfigureMockMvc
 class SecurityTest {
@@ -23,12 +26,6 @@ class SecurityTest {
 
     @Autowired
     MockMvc mvc;
-
-    @Test
-    void health_probes_need_no_token() throws Exception {
-        mvc.perform(get("/actuator/health/liveness")).andExpect(status().isOk());
-        mvc.perform(get("/actuator/health/readiness")).andExpect(status().isOk());
-    }
 
     @Test
     void no_token_is_401() throws Exception {

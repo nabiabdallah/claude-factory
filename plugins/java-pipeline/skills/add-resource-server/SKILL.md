@@ -1,13 +1,13 @@
 ---
 name: add-resource-server
-description: Protect the current java-pipeline service as an OAuth2 resource server — every request needs a valid JWT (signature, issuer, audience, expiry, subject) from an https issuer except health probes; GET needs <service>:read, other methods <service>:write; real signed test tokens (TestTokens), no identity provider needed for tests. Use when the user asks to add authentication, authorization, security, OAuth2 or JWT to a service.
+description: Protect the current java-pipeline service as an OAuth2 resource server — every request needs a valid JWT (signature, issuer, audience, expiry, subject) from an https issuer except health probes and Prometheus metrics (management port); GET needs <service>:read, other methods <service>:write; real signed test tokens (TestTokens), no identity provider needed for tests. Use when the user asks to add authentication, authorization, security, OAuth2 or JWT to a service.
 disable-model-invocation: true
 ---
 
 # Add resource server (OAuth2 / JWT)
 
 1. Confirm you are in the service's root (`pom.xml` inheriting `factory-parent`, with
-   `spring-boot-starter-actuator`) and the working tree is clean. If not, stop and tell the user.
+   `spring-boot-starter-actuator`, and the management port with the runtime tests of java-pipeline 0.15.0+ templates) and the working tree is clean. If not, stop and tell the user.
 2. Create a branch, e.g. `git switch -c security/resource-server`.
 3. Run the script exactly once from the project root:
 

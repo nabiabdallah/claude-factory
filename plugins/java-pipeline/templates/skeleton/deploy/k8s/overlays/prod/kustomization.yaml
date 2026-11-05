@@ -9,6 +9,22 @@ resources:
 replicas:
   - name: app-skeleton
     count: 3
+# Trace sampling and the environment name on every span (ADR 0014).
+patches:
+  - target:
+      kind: Deployment
+      name: app-skeleton
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: MANAGEMENT_TRACING_SAMPLING_PROBABILITY
+          value: "0.1"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: OTEL_RESOURCE_ATTRIBUTES
+          value: deployment.environment.name=prod
 images:
   - name: ghcr.io/nabiabdallah/app-skeleton
     newTag: unreleased

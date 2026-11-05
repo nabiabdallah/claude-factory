@@ -1,6 +1,6 @@
 
 ## Security (OAuth2 resource server)
-- Every request needs a valid JWT except `/actuator/health/**`. Checked: signature (issuer's keys), issuer
+- Every request needs a valid JWT except `/actuator/health/**` and `/actuator/prometheus` (management port only). Checked: signature (issuer's keys), issuer
   (`AUTH_ISSUER_URI`), audience (`AUTH_AUDIENCE`, default the service name), expiry, and a usable `sub` (present,
   not blank, ≤ 255 chars, no control characters). No issuer, a blank issuer, an issuer not on https (plain http
   only to localhost / 127.x / [::1]) or a blank audience → no start. Calls to the issuer are https-only too. Calls to the issuer time out after 3s (request refused with 401).

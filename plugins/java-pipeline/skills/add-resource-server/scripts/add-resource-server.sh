@@ -44,6 +44,17 @@ targets=(
   "src/test/java/$pkg_path/support/IdentityProviderTimeoutTest.java"
   "src/test/java/$pkg_path/config/IdentityProviderTransportTest.java"
 )
+# Runtime tests from java-pipeline 0.15.0+ templates (management port, factory ADR 0014): checked up front, so a
+# project this script can't adapt is left untouched.
+actuator_test="src/test/java/$pkg_path/runtime/ActuatorEndpointsTest.java"
+observability_test="src/test/java/$pkg_path/runtime/ObservabilityTest.java"
+grep -qs '^management.server.port=' src/main/resources/application.properties \
+  || die "needs Actuator on its own management port (java-pipeline 0.15.0+ templates, factory ADR 0014)"
+grep -qs 'var response = get(endpoint, null);' "$actuator_test" \
+  || die "$actuator_test doesn't match the 0.15.0+ template (get(endpoint, null) in other_actuator_endpoints_are_not_exposed)"
+grep -qs 'return null; // no API authentication yet' "$observability_test" \
+  || die "$observability_test doesn't match the 0.15.0+ template (apiAuthorization() returning null)"
+
 for t in "${targets[@]}"; do
   [[ ! -e "$t" ]] || die "$t already exists; refusing to overwrite"
 done
@@ -66,45 +77,46 @@ put test/support/StartupGuardsTest.java "${targets[6]}"
 put test/support/IdentityProviderTimeoutTest.java "${targets[7]}"
 put test/config/IdentityProviderTransportTest.java "${targets[8]}"
 
-# The templates' ActuatorEndpointsTest expects 404 for unexposed endpoints without a token; behind the resource
-# server that request is a 401 first. Rewrite it into two exact cases (token → 404 proves "not exposed";
-# no token → 401), never "401 or 404" (which would hide a regression to exposure.include=*).
-actuator_test="src/test/java/$pkg_path/runtime/ActuatorEndpointsTest.java"
-actuator_note=""
-if [[ -f "$actuator_test" ]]; then
-  if ! python3 -I - "$actuator_test" "$name" <<'PYA'
+# The templates' runtime tests call actuator and the API without a token (factory ADR 0014). Behind the resource
+# server: ActuatorEndpointsTest sends a token where it proves "not exposed" (exactly 404) and gains a tokenless 401
+# case, never "401 or 404" (which would hide a regression to exposure.include=*); ObservabilityTest's API calls
+# send a read token. Both were checked before any file changed.
+python3 -I - "$actuator_test" "$observability_test" "$name" "$pkg" <<'PYA'
 import sys
-path, svc = sys.argv[1], sys.argv[2]
-s = open(path).read()
-old = """        mvc.perform(get(endpoint))
-                .andExpect(status().isNotFound())
-                .andExpect(content().string(not(containsString("propertySources"))));
-    }"""
-if old not in s:
-    sys.exit(1)
+actuator, observability, svc, pkg = sys.argv[1:]
+s = open(actuator).read()
+old = """        // Exactly 404. /java-pipeline:add-resource-server sends a token here and adds a tokenless 401 case.
+        var response = get(endpoint, null);
+
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body()).doesNotContain("propertySources");
+    }
+"""
 new = """        // With a valid token: exactly 404 proves the endpoint is not exposed.
-        mvc.perform(get(endpoint).header("Authorization", TestTokens.withScopes("%s:read")))
-                .andExpect(status().isNotFound())
-                .andExpect(content().string(not(containsString("propertySources"))));
+        var response = get(endpoint, TestTokens.withScopes("%s:read"));
+
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body()).doesNotContain("propertySources");
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"/actuator/env", "/actuator/beans", "/actuator/metrics", "/actuator/configprops"})
     void other_actuator_endpoints_need_a_token(String endpoint) throws Exception {
-        mvc.perform(get(endpoint))
-                .andExpect(status().isUnauthorized())
-                .andExpect(content().string(not(containsString("propertySources"))));
-    }""" % svc
+        var response = get(endpoint, null);
+
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(response.body()).doesNotContain("propertySources");
+    }
+""" % svc
 s = s.replace(old, new, 1)
-pkg_line = s.splitlines()[0]
-base = pkg_line.removeprefix("package ").removesuffix(";").rsplit(".runtime", 1)[0]
-s = s.replace("import org.junit.jupiter.api.Test;", "import " + base + ".support.TestTokens;\nimport org.junit.jupiter.api.Test;", 1)
-open(path, "w").write(s)
+s = s.replace("import java.net.URI;", "import %s.support.TestTokens;\nimport java.net.URI;" % pkg, 1)
+open(actuator, "w").write(s)
+s = open(observability).read()
+s = s.replace("        return null; // no API authentication yet",
+              '        return TestTokens.withScopes("%s:read");' % svc, 1)
+s = s.replace("import io.opentelemetry.sdk.testing", "import %s.support.TestTokens;\nimport io.opentelemetry.sdk.testing" % pkg, 1)
+open(observability, "w").write(s)
 PYA
-  then
-    actuator_note="add-resource-server: $actuator_test doesn't match the template; make 'other_actuator_endpoints_are_not_exposed' send TestTokens.withScopes(\"${name}:read\") (expect 404) and add a tokenless case expecting 401."
-  fi
-fi
 
 mkdir -p src/main/resources
 props_tmp="$(mktemp "${TMPDIR:-/tmp}/add-resource-server.XXXXXX")"
@@ -168,7 +180,6 @@ if ! "$helper" -q -B verify; then
   cat >&2 <<EOT
 add-resource-server: ./mvnw verify failed; changes left in place (not committed).
 add-resource-server: expected for an existing service: endpoint tests that call without a token now get 401.
-${actuator_note}
 add-resource-server: send TestTokens.withScopes("${name}:read" / "${name}:write") in those tests (see CLAUDE.md).
 EOT
   exit 1
@@ -176,6 +187,3 @@ fi
 
 echo "add-resource-server: ${name} is now an OAuth2 resource server (scopes ${name}:read / ${name}:write); ./mvnw verify green. Nothing committed."
 echo "add-resource-server: ADR ${adr}. Production needs AUTH_ISSUER_URI (and AUTH_AUDIENCE if not '${name}')."
-if [[ -n "$actuator_note" ]]; then
-  echo "$actuator_note"
-fi

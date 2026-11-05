@@ -24,19 +24,18 @@ validate the factory: don't port factory changes to it or build features on it u
 | Spring Boot 4.1 | factory-parent 2.0.0 (Boot 4.1.2, Spring 7, Tomcat 11, Jackson 3); scan runs with no exceptions | ADR 0010, PR #3 |
 | #5 Security defaults | https-only issuer (loopback http allowed), required `sub`, caller-isolation and per-caller idempotency checks in the spec template, reviewers and test-writer; java-pipeline 0.12.0 | ADR 0011, PR #4 |
 | #3 Deploy safety | Base + staging/prod overlays pinned to commits on `main` (`newTag: unreleased` until promoted); promotion = PR, checked by `check-deploy.sh` (kubeconform, commit on main, migration rollout rule with a `recreate` component); `MigrationRolloutTest` in add-postgres; PDB `maxUnavailable: 1`; default-deny NetworkPolicy; java-pipeline 0.13.0 | ADR 0012, PR #5 |
-| #6 Build hygiene | Maven Enforcer in factory-parent (Java 21+, Maven 3.9+, pinned plugins, no SNAPSHOT/banned/Java-22+ dependencies); JaCoCo floor 80% lines / 70% branches, raise-only; factory-parent 2.1.0, java-pipeline 0.14.0 | ADR 0013, PR (this step) |
+| #6 Build hygiene | Maven Enforcer in factory-parent (Java 21+, Maven 3.9+, pinned plugins, no SNAPSHOT/banned/Java-22+ dependencies); JaCoCo floor 80% lines / 70% branches, raise-only; factory-parent 2.1.0, java-pipeline 0.14.0 | ADR 0013, PR #6, factory-parent 2.1.0 published |
+| #4 Observability | Actuator on management port 8081 (probes, `/actuator/prometheus`), Prometheus metrics with latency histograms, OpenTelemetry traces over OTLP (staging 100%, prod 10%), raw URLs stripped from spans, trace ids in logs; NetworkPolicy opens metrics/OTLP only to `claude-factory/monitoring` namespaces; java-pipeline 0.15.0 | ADR 0014, PR (this step) |
 
 ### Waiting on the owner
-- Review and merge the #6 PR, then tag `factory-parent-v2.1.0` (projects created outside CI need it published).
+- Review and merge the #4 PR.
 - After 2.0.0 is published, Dependabot will open a parent-upgrade PR in payments-service that fails without
   the ADR 0010 code changes. Recommendation: close it, unless the owner wants payments-service upgraded.
 - #1 needs a choice: GitHub Pro (about $4/month), public repos, or an organization.
-- #4 needs a choice of stack: Prometheus + OpenTelemetry (default) or a vendor.
 
 ### Next, in the owner's approved order
-1. **#4 Observability.** Expose metrics and tracing (only health is exposed today), using the stack the owner picks.
-2. **#7 Factory as a product.** Plugin release tags, a changelog, and an onboarding guide.
-3. **#1 Repo guardrails.** Branch protection and secret scanning, once the plan choice above is made. Branch
+1. **#7 Factory as a product.** Plugin release tags, a changelog, and an onboarding guide.
+2. **#1 Repo guardrails.** Branch protection and secret scanning, once the plan choice above is made. Branch
    protection is what makes the #3 promotion-PR review mechanically required.
 
 ### After #7

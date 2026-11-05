@@ -32,3 +32,5 @@ and health details can leak internals.
 - Note: in a test JVM, Spring Boot configures logging once; the `local` profile test asserts the effective
   setting rather than log output (plain-text output was verified in an isolated run).
 - Follow-ups: when auth arrives (release D), the health endpoints stay unauthenticated.
+- Amended by ADR 0014: Actuator moved to management port 8081 and exposes `prometheus` besides `health`;
+  traces go to an OpenTelemetry Collector over OTLP.
