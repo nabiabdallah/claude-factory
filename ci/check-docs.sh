@@ -4,7 +4,7 @@
 set -euo pipefail
 
 if [[ $# -eq 0 ]]; then
-  set -- README.md docs/*.md docs/factory-adr/*.md plugins/java-pipeline/README.md \
+  set -- README.md SECURITY.md docs/*.md docs/factory-adr/*.md plugins/java-pipeline/README.md \
     plugins/java-pipeline/CHANGELOG.md parents/factory-parent/CHANGELOG.md
 fi
 python3 -I - "$@" <<'PY'

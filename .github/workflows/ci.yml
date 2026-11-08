@@ -51,6 +51,11 @@ jobs:
           ci/test-release-notes.sh
           ci/check-docs.sh
 
+      # Repo guardrails (factory ADR 0016): the rulesets and security settings protect-repo.sh would send, checked
+      # against the approved rules and the real job names; no GitHub calls.
+      - name: Repo guardrails script (dry run and a fake gh)
+        run: ci/test-protect-repo.sh
+
       - name: Supply-chain checks (SHA-pinned actions, base digest, pinned tools, SBOM)
         run: ci/check-supply-chain.sh plugins/java-pipeline/templates/skeleton
 

@@ -15,7 +15,7 @@ validate the factory: don't port factory changes to it or build features on it u
 - Send broad investigations to subagents so the main session stays small.
 - Push, merge, tag, create a repo, or change GitHub settings only after the owner says yes.
 
-## Status (2026-11-07)
+## Status (2026-11-08)
 
 ### Done
 | Step | Result | Record |
@@ -32,18 +32,18 @@ validate the factory: don't port factory changes to it or build features on it u
 - Review payments-service PR #10 (spec 0005).
 - After 2.0.0 is published, Dependabot will open a parent-upgrade PR in payments-service that fails without
   the ADR 0010 code changes. Recommendation: close it, unless the owner wants payments-service upgraded.
-- #1: the owner chose public repositories. Open decisions (details in `docs/plans/01-repo-guardrails.md`):
-  1. Owner email in existing commits: accept it (no history rewrite) and use the noreply address from now on?
-  2. payments-service: public too, or keep it private (then it gets no protection)?
-  3. License: keep all-rights-reserved (no LICENSE), or add one (e.g. MIT / Apache-2.0)?
-  4. Required PR approvals: recommendation 0 (PR + required checks, admin bypass only), because the owner
-     authors the PRs and can't approve their own.
-  5. CodeQL default setup: on or off (on adds a few minutes of Actions per PR)?
+- #1, after its PR merges, each with the owner's yes: make claude-factory and payments-service public
+  (`gh repo edit <repo> --visibility public --accept-visibility-change-consequences`), run
+  `ci/protect-repo.sh nabiabdallah/claude-factory factory` and `ci/protect-repo.sh nabiabdallah/payments-service
+  service`, then check with `gh api repos/<repo>/rulesets` and a PR with a red check that merging is blocked.
+- Set the noreply commit email in both clones (`git config user.email
+  99053318+nabiabdallah@users.noreply.github.com`); the sandbox can't write `.git/config`.
 
 ### Next, in the owner's approved order
-1. **#1 Repo guardrails.** Public repos, rulesets on `main` and release tags, secret scanning, once the
-   decisions above are made. Branch
-   protection is what makes the #3 promotion-PR review mechanically required.
+1. **#1 Repo guardrails.** Decisions made 2026-11-08 (public repos incl. payments-service, existing history
+   kept and noreply email from now on, no license, 0 required approvals, CodeQL on). `ci/protect-repo.sh`,
+   `SECURITY.md` and ADR 0016 are in the step's PR; the step is done once the GitHub changes above are applied
+   and checked. Branch protection is what makes the #3 promotion-PR review mechanically required.
 
 ### After #1
 Each new pipeline plugin gets its own plan for the owner's OK:

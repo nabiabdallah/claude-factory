@@ -123,6 +123,17 @@ version and newest changelog section disagree (ADR 0015). Tags are never moved o
   `git tag factory-parent-vX.Y.Z && git push origin factory-parent-vX.Y.Z`. `publish-parent.yml` checks the tag
   and the changelog and deploys to GitHub Packages; Dependabot then opens upgrade PRs in services.
 
+## Repo guardrails
+
+The factory and its services are public repositories, because rulesets and secret scanning are free only there
+(ADR 0016). `ci/protect-repo.sh <owner/repo> <factory|service>` applies the guardrails with your admin `gh` login,
+idempotently: `main` changes only through a PR with the required checks green and the branch up to date (0
+approvals; admins may bypass only through a PR); release tags can't be moved or deleted (factory); secret
+scanning with push protection, Dependabot alerts and security updates, private vulnerability reporting, CodeQL;
+fork-PR workflows wait for approval; the workflow token is read-only. `--dry-run` prints the requests;
+`ci/test-protect-repo.sh` checks them in factory CI. Report vulnerabilities as described in
+[SECURITY.md](SECURITY.md). Commit with your GitHub noreply address.
+
 ## Develop
 
 ```bash
