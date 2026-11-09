@@ -34,7 +34,7 @@
     <jib.version>3.5.2</jib.version>
     <!-- Pinned to a digest (ADR 0009): the same build always gets the same base. The weekly factory workflow
          "base-image" opens a PR when distroless publishes a new digest (security fixes). -->
-    <factory.image.base>gcr.io/distroless/java21-debian13:nonroot@sha256:b22857e939bd95abd69d9d747f0421a274f9f70855ecfc335f7d97f6eeef578d</factory.image.base>
+    <factory.image.base>gcr.io/distroless/java21-debian13:nonroot@sha256:d978eefd303c59c42f382aef811a0e41f2c68a6e5c319a23769cd3d1d5bf8e3c</factory.image.base>
     <factory.image.registry>ghcr.io/nabiabdallah</factory.image.registry>
     <!-- Build hygiene (claude-factory ADR 0013). Build-only plugins, nothing ships in the service. -->
     <extra-enforcer-rules.version>1.12.1</extra-enforcer-rules.version>
