@@ -11,9 +11,34 @@ validate the factory: don't port factory changes to it or build features on it u
 ## How we work
 - Run one session per step. Start the session with "Read docs/ROADMAP.md and continue", and end it when the step's PR merges.
 - Plan before code. Write the step's plan to `docs/plans/<step>.md`, get the owner's OK, then implement. Delete
-  the plan when the PR merges: the ADR and the PR description keep the reasoning.
+  the plan when the PR merges: the ADR and the PR description keep the reasoning. Steps in the autonomous queue
+  below skip the wait: their plan is the PR description and the owner's merge is the approval.
 - Send broad investigations to subagents so the main session stays small.
-- Push, merge, tag, create a repo, or change GitHub settings only after the owner says yes.
+- Merge, tag, push to `main`, create a repo, or change GitHub settings only after the owner says yes. Pushing a
+  branch and opening a PR for a queued step needs no further yes (ADR 0017).
+
+## Autonomous queue (ADR 0017)
+The owner starts a session with "Read docs/ROADMAP.md and continue" (or just "go"). Take the first step below
+that isn't done, bring it to a PR with green factory CI, and stop. One step per session, one PR per step. Tick
+the step in the PR that finishes it. The steps come from the architecture audit of 2026-11-10 (java-pipeline
+0.16.0): the factory is one strong production line, and these are what it lacks to work as a department.
+
+| # | Step | Gap it closes | Done when |
+|---|---|---|---|
+| A1 | Autonomous-mode rules | Every action needed the owner's yes | This section, `CLAUDE.md` and ADR 0017 are merged |
+| A2 | Headless runner | The pipeline only runs in an interactive session on the owner's machine: no trigger, no queue | A labelled issue in a service repo starts `new-feature` in GitHub Actions and ends in a PR; a red build fails the run (today the Stop hook gives up after 3 attempts and lets the session end). Needs from the owner: the Claude credential as a repo secret |
+| A3 | Intake skill | Nothing turns an idea into a spec; the pipeline starts from a spec the owner co-writes | `/java-pipeline:intake <idea>` drafts a spec from `_template.md` with open questions listed, as a PR or issue the owner approves |
+| A4 | Orchestrator and implementer split | The main session both conducts the stages and writes the code; a feature can't be resumed or split | An implementer agent; `new-feature` only orchestrates; per-feature state file so a new session resumes at the right stage |
+| A5 | Domain rules out of the agents | Agents are hard-wired to banking (money, idempotency on transfers), which misfires on other software | Agents read a per-project profile; the banking checks become the `payments-example` profile; the skeleton gets a neutral one |
+| A6 | Pipeline evals and metrics | CI tests scripts and templates, never agent behaviour; cost and cycle time aren't tracked | A benchmark spec runs through the pipeline on plugin changes and its result is recorded; each PR reports stages, attempts and reviewer findings |
+
+Not queued yet (each needs its own plan and the owner's OK): more roles (security reviewer, end-to-end tester,
+maintenance agent for Dependabot triage and template drift), a learning loop from reviewer findings back into
+the agents, and the frontend and Python pipelines already listed under "After #7". GitOps, post-deploy checks
+and the alert-to-issue loop wait for a real cluster.
+
+Where the work runs: a cloud session can't download Maven dependencies, so factory CI on the PR is the judge
+there. Use the owner's machine for steps that change the templates or factory-parent.
 
 ## Status (2026-11-05)
 
