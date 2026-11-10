@@ -100,6 +100,14 @@ jobs:
           plugins/java-pipeline/templates/skeleton/.github/scripts/ci-tools.sh kubeconform
           PATH="$RUNNER_TEMP/ci-bin:$PATH" ci/test-check-deploy.sh "$RUNNER_TEMP/projects/ci-skeleton"
 
+      # Unattended feature run (factory ADR 0018): who may start one, which specs count, what the gate refuses,
+      # what gets published. No GitHub, Maven or Claude credential involved.
+      - name: Test factory-run.sh (issue → pipeline → PR) on a generated project and on both templates
+        run: |
+          ci/test-factory-run.sh "$RUNNER_TEMP/projects/ci-skeleton"
+          ci/test-factory-run.sh plugins/java-pipeline/templates/skeleton
+          ci/test-factory-run.sh plugins/java-pipeline/templates/payments-example
+
       - name: Smoke-test add-resource-server (JWT via a local stand-in issuer; with and without Postgres)
         run: |
           out="$RUNNER_TEMP/projects"
