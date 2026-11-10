@@ -60,18 +60,26 @@ enable the plugin if it's missing.
 ## 5. Put it on GitHub
 
 ```bash
-gh repo create nabiabdallah/customer-service --private --source . --push
+git config user.email 99053318+nabiabdallah@users.noreply.github.com   # public repo: no private email in commits
+gh repo create nabiabdallah/customer-service --public --source . --push
 gh secret set FACTORY_PACKAGES_TOKEN --repo nabiabdallah/customer-service                    # Actions
 gh secret set FACTORY_PACKAGES_TOKEN --app dependabot --repo nabiabdallah/customer-service   # Dependabot
+~/dev/factory/claude-factory/ci/protect-repo.sh nabiabdallah/customer-service service       # after the first green CI run
 ```
 
-Both secrets hold the same `read:packages` token. In the repo, turn on **Settings → Actions → General → Allow
-GitHub Actions to create and approve pull requests** if you want bot-opened PRs (the factory's base-image PR
-needs it).
+Both secrets hold the same `read:packages` token; GitHub doesn't pass them to PRs from forks, so a fork PR fails
+`verify` instead of reading them. Repos are public because rulesets and secret scanning are free only there
+(ADR 0016). `protect-repo.sh` needs your admin `gh` login and sets: `main` only through a PR with `verify` and
+`manifests` green and the branch up to date (0 approvals; admins may bypass only through a PR), secret scanning
+with push protection, Dependabot alerts and security updates, private vulnerability reporting, CodeQL (Java and
+Actions), approval for fork-PR workflows from all outside contributors, and a read-only workflow token. Re-run it
+any time to restore them. Turn on **Settings → Actions → General → Allow GitHub Actions to create and approve
+pull requests** if you want bot-opened PRs.
 
 **Check:** the first CI run on `main` is green: `verify` (tests, ArchUnit, Enforcer, coverage floor, Spotless),
 the image scan, `manifests` (deploy gate), and `image` (pushes `ghcr.io/nabiabdallah/customer-service:<sha>`,
-signed with cosign).
+signed with cosign). After `protect-repo.sh`, `gh api repos/nabiabdallah/customer-service/rulesets` lists `main`,
+and `git push origin main` is rejected.
 
 ## 6. Optional capabilities
 
