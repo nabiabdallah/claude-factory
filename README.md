@@ -25,7 +25,7 @@ claude-factory/
 ├── parents/factory-parent/             shared Maven build every service inherits (GitHub Packages)
 ├── docs/ONBOARDING.md                   empty machine → deployed change
 ├── docs/factory-adr/                    decisions about the factory itself
-├── ci/                                 factory CI checks (supply chain, deploy gate, build rules, releases, docs)
+├── ci/                                 factory CI checks (supply chain, deploy gate, build rules, releases, docs, unattended runs)
 └── README.md
 ```
 
@@ -59,6 +59,10 @@ cd ~/dev/projects/customer-service && claude
 /java-pipeline:add-resource-server              # optional: OAuth2/JWT auth (AUTH_ISSUER_URI), test tokens
 /java-pipeline:new-feature Add GET /customers/{id}. Write the spec first.
 ```
+
+Unattended, from a service repo on GitHub (ADR 0018): put the label `factory:build` on an issue that names an
+approved spec; the same pipeline runs in GitHub Actions and ends in a pull request
+([ONBOARDING.md](docs/ONBOARDING.md), step 7).
 
 Agents are available as `java-pipeline:architect-reviewer`, `java-pipeline:test-writer` and
 `java-pipeline:code-reviewer`. Hooks: PostToolUse formats edited Java files with Spotless;

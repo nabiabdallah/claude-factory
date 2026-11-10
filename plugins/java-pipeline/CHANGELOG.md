@@ -5,6 +5,19 @@ All notable changes to the plugin, newest first ([Keep a Changelog](https://keep
 Each version is tagged `java-pipeline-vX.Y.Z`; projects pin the tag in `.claude/settings.json` (`ref`).
 Decisions are in `docs/factory-adr/`.
 
+## [0.17.0] - 2026-11-10
+
+- Unattended feature runs (ADR 0018): the templates carry `.github/workflows/factory-feature.yml` and
+  `.github/scripts/factory-run.sh`. The label `factory:build` on an issue that names an approved spec runs
+  `new-feature` in GitHub Actions and ends in a pull request. The agent holds no GitHub token; the workflow
+  refuses the run if protected files changed, a test was deleted, a build rule was loosened or `./mvnw verify`
+  is red, and only then pushes the branch and opens the PR.
+- `new-feature` has a "Headless runs" section: no waiting for approval, stop and report instead.
+
+**Upgrading:** to use it in an existing service, copy both files from `templates/skeleton/.github/`, set `ref` to
+`java-pipeline-v0.17.0`, create the label `factory:build`, and add the secret `CLAUDE_CODE_OAUTH_TOKEN` (from
+`claude setup-token`) or `ANTHROPIC_API_KEY` (ONBOARDING, step 7). Nothing changes for services that don't.
+
 ## [0.16.0] - 2026-11-05
 
 - New projects are pinned to the plugin version that created them: `new-project` writes

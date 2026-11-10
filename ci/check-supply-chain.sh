@@ -39,7 +39,24 @@ for t in plugins/java-pipeline/templates/*; do
   grep -qE 'id-token: write' <<<"$flat" || problem "$ci: keyless signing needs id-token: write"
 done
 
-# 5. A built project has an SBOM that lists its real dependencies.
+# 5. The unattended feature run (factory ADR 0018): pinned CLI, no write token within the agent's reach, issue
+#    text never on a command line, and both templates carry the same runner.
+first=""
+for t in plugins/java-pipeline/templates/*; do
+  wf="$t/.github/workflows/factory-feature.yml"; runner="$t/.github/scripts/factory-run.sh"
+  [[ -f "$wf" && -x "$runner" ]] || { problem "$t: no factory-feature.yml or executable factory-run.sh"; continue; }
+  grep -qE '^claude_code_version=[0-9]+\.[0-9]+\.[0-9]+$' "$runner" || problem "$runner: Claude Code CLI is not pinned to an exact version"
+  grep -qE '^\s+persist-credentials: false$' "$wf" || problem "$wf: checkout leaves GitHub credentials for the agent"
+  ! grep -qE '^\s+run:.*\$\{\{' "$wf" || problem "$wf: a run command interpolates an expression (pass it through env)"
+  agent_step=$(sed -n '/factory-run.sh agent/,/^      - name:/p' "$wf")
+  ! grep -qE 'GH_TOKEN|GITHUB_TOKEN|github\.token|FACTORY_PR_TOKEN' <<<"$agent_step" || problem "$wf: the agent step is given a GitHub token"
+  if [[ -z "$first" ]]; then first="$t"; else
+    cmp -s "$first/.github/scripts/factory-run.sh" "$runner" || problem "$runner differs from $first's"
+    cmp -s "$first/.github/workflows/factory-feature.yml" "$wf" || problem "$wf differs from $first's"
+  fi
+done
+
+# 6. A built project has an SBOM that lists its real dependencies.
 if [[ $# -gt 0 ]]; then
   bom="$1/target/classes/META-INF/sbom/application.cdx.json"
   if [[ ! -f "$bom" ]]; then

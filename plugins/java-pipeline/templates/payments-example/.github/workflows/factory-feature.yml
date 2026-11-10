@@ -1,0 +1,96 @@
+name: Factory feature
+
+# Unattended feature run (claude-factory ADR 0018). Put the `factory:build` label on an issue whose text names an
+# approved spec (docs/specs/NNNN-name.md, "- Status: Approved", merged to the default branch). The java-pipeline
+# `new-feature` skill builds it and the run ends in a pull request that closes the issue. You review and merge.
+#
+# Secrets: CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) or ANTHROPIC_API_KEY; FACTORY_PACKAGES_TOKEN (as CI).
+# Optional: FACTORY_PR_TOKEN, a fine-grained token for this repository (Contents and Pull requests: read and write),
+# so CI starts on the pull request by itself. Optional variable: FACTORY_MAX_BUDGET_USD (default 25).
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+# One run per issue at a time; a second label waits instead of cancelling a run that is mid-change.
+concurrency:
+  group: factory-feature-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.event.label.name == 'factory:build'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write # push the feature branch
+      pull-requests: write # open the pull request
+      issues: write # report on the issue
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      FACTORY_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      # The default branch, never the issue's text: the spec the agent builds is the one the owner merged.
+      # No credentials are left in the checkout, so the agent can't push or call the GitHub API.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username-env-var: GITHUB_ACTOR
+          server-password-env-var: FACTORY_PACKAGES_TOKEN
+
+      # Issue text reaches the script through the environment, never through the command line.
+      - name: Who asked, which approved spec, which plugin release
+        run: .github/scripts/factory-run.sh resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SENDER: ${{ github.event.sender.login }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+
+      - name: Install the pinned Claude Code CLI and the pinned java-pipeline plugin
+        run: .github/scripts/factory-run.sh tools
+
+      - name: Run the pipeline (spec → plan → review → tests → code → verify → review)
+        run: .github/scripts/factory-run.sh agent
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FACTORY_PACKAGES_TOKEN: ${{ secrets.FACTORY_PACKAGES_TOKEN }}
+          FACTORY_MAX_BUDGET_USD: ${{ vars.FACTORY_MAX_BUDGET_USD }}
+
+      - name: Gate (committed, protected files untouched, ./mvnw verify green)
+        run: .github/scripts/factory-run.sh gate
+        env:
+          FACTORY_PACKAGES_TOKEN: ${{ secrets.FACTORY_PACKAGES_TOKEN }}
+
+      - name: Push the branch and open the pull request
+        run: .github/scripts/factory-run.sh publish
+        env:
+          GH_TOKEN: ${{ secrets.FACTORY_PR_TOKEN || github.token }}
+          FACTORY_PR_TOKEN_SET: ${{ secrets.FACTORY_PR_TOKEN != '' }}
+
+      - name: Tell the issue why the run stopped
+        if: failure()
+        run: .github/scripts/factory-run.sh failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Keep the run's report and logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: agent-run
+          path: |
+            ${{ runner.temp }}/factory-run/report.md
+            ${{ runner.temp }}/factory-run/agent.json
+            ${{ runner.temp }}/factory-run/verify.log
+            ${{ runner.temp }}/factory-run/failure
+          if-no-files-found: ignore

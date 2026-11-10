@@ -103,6 +103,26 @@ The pipeline: a spec in `docs/specs/` (you approve it) → plan → architect-re
 → implementation → `./mvnw verify` (the Stop hook won't let the session finish while it's red) → code-reviewer →
 PR. You approve the spec and the plan, and you merge.
 
+**Unattended** ([ADR 0018](factory-adr/0018-headless-feature-runs.md)): the same pipeline in GitHub Actions,
+started by a label. Once per repo:
+
+```bash
+claude setup-token                                                  # prints a one-year token for your subscription
+gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo nabiabdallah/customer-service
+gh label create factory:build --repo nabiabdallah/customer-service --description "Build this issue's approved spec"
+```
+
+Optional: the secret `FACTORY_PR_TOKEN` (a fine-grained token for this repo, Contents and Pull requests read and
+write) so CI starts on the PR by itself, and the variable `FACTORY_MAX_BUDGET_USD` (default 25 per run).
+
+Then, per feature: merge a spec with `- Status: Approved` to `main`, open an issue whose text contains its path
+(`docs/specs/0002-get-customer.md`), and add the label `factory:build`. The run ends with a comment on the issue:
+the PR, or the phase and reason it stopped. To retry, fix the cause, delete the `factory/issue-<n>` branch if
+one was pushed, then remove and re-add the label.
+
+**Check:** the issue gets "Factory run finished: … is ready for review", and the PR's description maps each
+acceptance criterion to its tests. Without `FACTORY_PR_TOKEN`, close and reopen the PR to start CI.
+
 ## 8. Deploy
 
 Once per cluster ([ADR 0012](factory-adr/0012-deploy-safety.md), [ADR 0014](factory-adr/0014-observability-prometheus-otel.md)):

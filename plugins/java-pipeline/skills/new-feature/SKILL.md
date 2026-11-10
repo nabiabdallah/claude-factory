@@ -10,6 +10,23 @@ Feature request: $ARGUMENTS
 
 Follow these stages in order. Do not skip a stage; stop and ask the user if one can't be completed.
 
+## Headless runs
+When `FACTORY_HEADLESS=1` (an unattended run started by `.github/workflows/factory-feature.yml`, factory ADR 0018)
+nobody can answer a question or approve anything. The stages below still apply, with these changes:
+- **Spec:** the request names it. It is already approved; never draft, edit or reinterpret a spec. If it is
+  unclear, contradicts itself or the code, or can't be met, stop: write what is missing to the report file and
+  end without committing. The run then fails and the owner fixes the spec.
+- **Plan:** don't wait for approval. Resubmit to the architect-reviewer at most twice; if the verdict is still
+  REJECT, stop the same way. The final plan and verdict go in the report.
+- **Hand-off:** commit on the branch you are on (the runner created it). Don't push, don't open a PR, don't
+  switch branches. Leave no uncommitted or untracked files. Write the stage 7 report as Markdown to the path in
+  `$FACTORY_REPORT`: it becomes the pull request description.
+- **Off limits:** `.github/`, `.claude/`, `CLAUDE.md`, `docs/specs/`, `ArchitectureTest`, `archunit.properties`,
+  `mvnw`, `.mvn/`, `.gitignore`, `.trivyignore.yaml`, `deploy/k8s/overlays/`, and anything in `pom.xml` that
+  loosens a build rule. The runner refuses the whole run if one changes. If the feature truly needs such a
+  change, say so in the report instead of making it.
+- The runner runs `./mvnw verify` itself after you finish; a red build fails the run whatever you reported.
+
 ## 1. Spec
 - Find the spec in `docs/specs/`. If none exists, draft one from `docs/specs/_template.md`
   with the user, and STOP for their approval before planning.
