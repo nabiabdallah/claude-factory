@@ -1,8 +1,11 @@
 name: Factory feature
 
-# Unattended feature run (claude-factory ADR 0018). Put the `factory:build` label on an issue whose text names an
-# approved spec (docs/specs/NNNN-name.md, "- Status: Approved", merged to the default branch). The java-pipeline
-# `new-feature` skill builds it and the run ends in a pull request that closes the issue. You review and merge.
+# Unattended factory runs (claude-factory ADRs 0018 and 0019), started by a label on an issue:
+#   factory:spec    the issue describes an idea. The java-pipeline `intake` skill drafts a spec and the run ends in
+#                   a pull request that adds it. Merging it with "- Status: Approved" approves the spec.
+#   factory:build   the issue names an approved spec on the default branch (docs/specs/NNNN-name.md in its text, or
+#                   the "spec drafted" comment of an earlier factory:spec run). The `new-feature` skill builds it
+#                   and the run ends in a pull request that closes the issue. You review and merge.
 #
 # Secrets: CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) or ANTHROPIC_API_KEY; FACTORY_PACKAGES_TOKEN (as CI).
 # Optional: FACTORY_PR_TOKEN, a fine-grained token for this repository (Contents and Pull requests: read and write),
@@ -16,12 +19,12 @@ permissions:
 
 # One run per issue at a time; a second label waits instead of cancelling a run that is mid-change.
 concurrency:
-  group: factory-feature-${{ github.event.issue.number }}
+  group: factory-run-${{ github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
   build:
-    if: github.event.label.name == 'factory:build'
+    if: github.event.label.name == 'factory:build' || github.event.label.name == 'factory:spec'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
@@ -30,9 +33,10 @@ jobs:
       issues: write # report on the issue
     env:
       ISSUE_NUMBER: ${{ github.event.issue.number }}
+      FACTORY_LABEL: ${{ github.event.label.name }}
       FACTORY_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
-      # The default branch, never the issue's text: the spec the agent builds is the one the owner merged.
+      # The default branch: the spec the agent builds is the one the owner merged, never text from the issue.
       # No credentials are left in the checkout, so the agent can't push or call the GitHub API.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -48,17 +52,18 @@ jobs:
           server-password-env-var: FACTORY_PACKAGES_TOKEN
 
       # Issue text reaches the script through the environment, never through the command line.
-      - name: Who asked, which approved spec, which plugin release
+      - name: Who asked, what to do (draft a spec or build an approved one), which plugin release
         run: .github/scripts/factory-run.sh resolve
         env:
           GH_TOKEN: ${{ github.token }}
           SENDER: ${{ github.event.sender.login }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
 
       - name: Install the pinned Claude Code CLI and the pinned java-pipeline plugin
         run: .github/scripts/factory-run.sh tools
 
-      - name: Run the pipeline (spec → plan → review → tests → code → verify → review)
+      - name: Run the skill (intake for a spec; spec → plan → review → tests → code → verify → review for a build)
         run: .github/scripts/factory-run.sh agent
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -66,7 +71,7 @@ jobs:
           FACTORY_PACKAGES_TOKEN: ${{ secrets.FACTORY_PACKAGES_TOKEN }}
           FACTORY_MAX_BUDGET_USD: ${{ vars.FACTORY_MAX_BUDGET_USD }}
 
-      - name: Gate (committed, protected files untouched, ./mvnw verify green)
+      - name: Gate (spec: one complete spec file, nothing else; build: protected files untouched, ./mvnw verify green)
         run: .github/scripts/factory-run.sh gate
         env:
           FACTORY_PACKAGES_TOKEN: ${{ secrets.FACTORY_PACKAGES_TOKEN }}

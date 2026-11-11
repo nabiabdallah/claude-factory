@@ -99,7 +99,7 @@ cosign verify ghcr.io/nabiabdallah/<service>@sha256:<digest> \
 | `src/test/.../ApplicationContextTest.java` | Boots the full Spring context. |
 | `docs/specs/` | Specs with numbered acceptance criteria — the agents' source of truth. |
 | `docs/adr/` | Architecture decisions. |
-| `.github/workflows/factory-feature.yml` | Unattended feature run: the label `factory:build` on an issue naming an approved spec → pipeline → PR (`.github/scripts/factory-run.sh`; needs the secret `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`). |
+| `.github/workflows/factory-feature.yml` | Unattended runs: the label `factory:spec` on an issue → a spec PR from its idea; the label `factory:build` on an issue naming an approved spec → pipeline → PR (`.github/scripts/factory-run.sh`; needs the secret `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`). |
 | `.github/workflows/ci.yml` | CI: `./mvnw verify`, image scan, deploy gate (`manifests`), image push + signing on `main`. |
 
 ## Evolving it

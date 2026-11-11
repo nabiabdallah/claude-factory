@@ -110,14 +110,19 @@ started by a label. Once per repo:
 claude setup-token                                                  # prints a one-year token for your subscription
 gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo nabiabdallah/customer-service
 gh label create factory:build --repo nabiabdallah/customer-service --description "Build this issue's approved spec"
+gh label create factory:spec --repo nabiabdallah/customer-service --description "Draft a spec from this issue's idea"
 ```
 
 Optional: the secret `FACTORY_PR_TOKEN` (a fine-grained token for this repo, Contents and Pull requests read and
 write) so CI starts on the PR by itself, and the variable `FACTORY_MAX_BUDGET_USD` (default 25 per run).
 
-Then, per feature: merge a spec with `- Status: Approved` to `main`, open an issue whose text contains its path
-(`docs/specs/0002-get-customer.md`), and add the label `factory:build`. The run ends with a comment on the issue:
-the PR, or the phase and reason it stopped. To retry, fix the cause, delete the `factory/issue-<n>` branch if
+Then, per feature, from an idea ([ADR 0019](factory-adr/0019-intake-idea-to-spec.md)): open an issue that
+describes it and add the label `factory:spec`. The run opens a spec PR: answer any open questions in the file, make
+sure it says `- Status: Approved`, and merge. Then add `factory:build` to the same issue.
+
+Or with a spec you wrote (in a session: `/java-pipeline:intake <idea>`): merge it with `- Status: Approved` to
+`main`, open an issue whose text contains its path (`docs/specs/0002-get-customer.md`), and add `factory:build`. The run ends with a comment on the issue:
+the PR, or the phase and reason it stopped. To retry, fix the cause, delete the `factory/issue-<n>` or `factory/spec-<n>` branch if
 one was pushed, then remove and re-add the label.
 
 **Check:** the issue gets "Factory run finished: … is ready for review", and the PR's description maps each

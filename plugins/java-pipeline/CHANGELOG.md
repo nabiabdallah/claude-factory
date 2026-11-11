@@ -5,6 +5,18 @@ All notable changes to the plugin, newest first ([Keep a Changelog](https://keep
 Each version is tagged `java-pipeline-vX.Y.Z`; projects pin the tag in `.claude/settings.json` (`ref`).
 Decisions are in `docs/factory-adr/`.
 
+## [0.18.0] - 2026-11-11
+
+- New skill `/java-pipeline:intake <idea>`: drafts a spec in `docs/specs/` from the template, grounded in the
+  project's rules, ADRs and code, with every undecided point as an open question and a recommended answer (ADR 0019).
+- Unattended intake: the label `factory:spec` on an issue runs it in GitHub Actions and ends in a pull request
+  that adds exactly one spec. No open questions → it arrives `Approved` and merging approves it; otherwise `Draft`.
+- `factory:build` also finds the spec path in the issue's comments (the workflow's own, or from people who can
+  push), so one issue can go idea → spec → code.
+
+**Upgrading:** services that copied the 0.17.0 runner: copy `factory-run.sh` and `factory-feature.yml` from
+`templates/skeleton/.github/` again, set `ref` to `java-pipeline-v0.18.0` and create the label `factory:spec`.
+
 ## [0.17.0] - 2026-11-10
 
 - Unattended feature runs (ADR 0018): the templates carry `.github/workflows/factory-feature.yml` and

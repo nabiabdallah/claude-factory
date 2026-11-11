@@ -38,7 +38,7 @@ com.example.payments
 - Tests first. Every use case has a unit test with an in-memory adapter; no Spring context in unit tests.
 
 ## Workflow
-1. Start features with `/java-pipeline:new-feature`. Every feature starts from a spec in `docs/specs/` (copy `_template.md`). No spec → ask for one.
+1. Start features with `/java-pipeline:new-feature`. Every feature starts from a spec in `docs/specs/` (copy `_template.md`). No spec → draft one with `/java-pipeline:intake <idea>` and get it approved.
 2. Plan before coding; get the plan reviewed by the `java-pipeline:architect-reviewer` agent.
 3. Work is done only when `./mvnw verify` passes — the plugin's Stop hook enforces this.
 4. Significant design decisions → an ADR in `docs/adr/` (use `/java-pipeline:write-adr`).
