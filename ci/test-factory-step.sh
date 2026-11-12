@@ -54,6 +54,8 @@ report() { printf '# feat: step %s\n\nDid the step.\n' "$FACTORY_STEP" > "$FACTO
 case "$SCENARIO" in
   ok)          echo x > docs/new.md; g add docs/new.md; g commit -qm "docs: x"; report ;;
   protected)   echo y >> CLAUDE.md; g add CLAUDE.md; g commit -qm "docs: rules"; report ;;
+  template-wf) mkdir -p plugins/x/templates/y/.github/workflows; echo a > plugins/x/templates/y/.github/workflows/a.yml
+               g add plugins; g commit -qm "ci: template"; report ;;
   delete-test) g rm -q ci/test-something.sh; g commit -qm "drop test"; report ;;
   no-report)   echo x > docs/new.md; g add docs/new.md; g commit -qm "docs: x" ;;
   no-commit)   report ;;
@@ -130,6 +132,9 @@ grep -qx CLAUDE.md "$SP/protected" && ok "CLAUDE.md flagged as protected" || bad
 expect_ok "publish: protected" run_p publish
 grep -q 'issues/42/labels -f labels\[\]=risk:high' "$FAKE_GH/calls" && ok "PR labelled risk:high" || bad "no risk:high label"
 grep -qF 'risk:high' "$SP/pr-body.md" && ok "PR body lists the protected files" || bad "PR body lacks risk note"
+
+fresh; run_a resolve; SCENARIO=template-wf run_a agent; run_a pack; run_p gate
+grep -qx plugins/x/templates/y/.github/workflows/a.yml "$SP/protected" && ok "a template's workflow is protected too" || bad "template workflow not flagged"
 
 # --- refusals in the publish job
 fresh; run_a resolve; SCENARIO=delete-test run_a agent; run_a pack

@@ -66,6 +66,11 @@ jobs:
       - name: Factory step runner (stand-in agent, fake gh)
         run: ci/test-factory-step.sh
 
+      # Service provisioning (factory ADR 0024): input checks, scaffold, create, secrets on stdin only, labels,
+      # the App, guardrails; fake gh, stand-in new-project.sh, local remote.
+      - name: Service provisioning (fake gh, stand-in scaffold)
+        run: ci/test-new-service.sh
+
       - name: Supply-chain checks (SHA-pinned actions, base digest, pinned tools, SBOM)
         run: ci/check-supply-chain.sh plugins/java-pipeline/templates/skeleton
 

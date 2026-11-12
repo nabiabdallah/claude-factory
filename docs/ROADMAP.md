@@ -35,9 +35,9 @@ step's PR starts the next step, and "go" is no longer needed.
 | A3 (built, awaiting the owner's acceptance run) | Intake skill | Nothing turns an idea into a spec; the pipeline starts from a spec the owner co-writes | Built in ADR 0019, java-pipeline 0.18.0: `/java-pipeline:intake <idea>`, and the label `factory:spec` that runs it unattended and opens a spec PR. Done once a real labelled idea ends in a spec PR (same acceptance run as A2) |
 | B0 ✅ | Guardrails applied, ADR 0020 | The never-list was a rule the agent followed, not one GitHub enforced | Done: ADR 0020, PR #17; `protect-repo.sh` applied 2026-11-12 (rulesets `main` and `release tags`, secret scanning, CodeQL, Dependabot security updates); a PR with a red required check showed `BLOCKED` (PR #18, closed). Release tags can't be moved or deleted; restricting who creates them waits for B4, when the release workflow tags by itself |
 | B1 ✅ | Factory identity | The factory acted as the owner, and PRs opened with `GITHUB_TOKEN` didn't start CI | Done: ADR 0021, PR #19. App `nabiabdallah-factory-bot` (contents, pull requests, issues, workflows), installed on claude-factory; the identity check was green on 2026-11-12 (bot PR #20 started CI by itself) |
-| B2 (built, awaiting the owner's Claude token) | Factory steps run in Actions | Factory work runs on the owner's laptop, in a sandbox that blocks `gh`, Maven Central, Docker and release assets | Built in ADR 0022: `factory-step.yml` + `.github/scripts/factory-step.sh`. Two jobs: the agent hands over a git bundle, and a fresh checkout of the base gates and publishes it as the bot. Protected files make the PR `risk:high`. Headless rules in `CLAUDE.md`. Done when a queued step started by `workflow_dispatch` ends in a bot PR with green CI (the first run takes B3) |
+| B2 ✅ | Factory steps run in Actions | Factory work ran on the owner's laptop, in a sandbox that blocks `gh`, Maven Central, Docker and release assets | Done: ADR 0022, PR #21. The first unattended run (2026-11-12, ~7 min) took B2a and opened bot PR #22, which had green CI and was merged |
 | B2a ✅ | Two-job service runner | The service runner (ADR 0018) gates and publishes from the checkout the agent could rewrite, so a rewritten `factory-run.sh` would pass its own gate and publish with the write token | `factory-feature.yml` in both templates split like ADR 0022: the agent job hands over a bundle and the report; the gate (including `./mvnw verify`) and publish run on a fresh checkout of the base. `ci/test-factory-run.sh` covers an agent that rewrites the runner. New java-pipeline minor release with an Upgrading note. Done: ADR 0023, java-pipeline 0.19.0 (four jobs: agent, gate, publish, report; the tag follows the merge, see "Waiting on the owner") |
-| B3 | Service provisioning | Every service needs a repo, secrets, labels and protection set up by hand | `new-service.yml` (inputs: name, package, template) scaffolds with the current release, creates the public repo, sets `FACTORY_PACKAGES_TOKEN` for Actions and Dependabot and `CLAUDE_CODE_OAUTH_TOKEN` from claude-factory's own secrets, creates the labels, runs `protect-repo.sh` and installs the App. Check first whether an App can create repos on a personal account; if not, use a fine-grained token with Administration write, used only here (ADR 0020). Done when it provisions `demo-service`, and the A2/A3 acceptance run passes there: the issue "GET /hello?name=X returns a greeting" with `factory:spec` ends in a spec PR, and after the merge, in a feature PR |
+| B3 (built, awaiting the owner's token setup) | Service provisioning | Every service needs a repo, secrets, labels and protection set up by hand | Built in ADR 0024: `new-service.yml` + `.github/scripts/new-service.sh` scaffold from the latest release tag, create the public repo, copy the secrets on stdin, create the labels, add the repo to the App and run `protect-repo.sh`. The admin token is a fine-grained token in a `provisioning` environment that only `main` can use. The factory-step gate now also protects the templates' `.github/`. Done when it provisions `demo-service`, and the A2/A3 acceptance run passes there: the issue "GET /hello?name=X returns a greeting" with `factory:spec` ends in a spec PR, and after the merge, in a feature PR |
 | B4 | Chaining and releases | Every hop waits for a person: "go", relabelling after a spec merges, tagging | When a spec PR with `- Status: Approved` merges, the bot adds `factory:build` to its issue. When a `plugin.json` or factory-parent version bump merges, the tag and release follow. When a step's PR merges (and once a day), the next queued step is dispatched if no step PR is open. `FACTORY_PAUSED=true` stops all dispatch. Done when merging a spec PR alone leads to a feature PR, and merging a step's PR alone starts the next step |
 | B5 | Risk tiers and auto-merge | The owner merges every PR, including mechanical ones | `risk-tier.yml` labels each PR `risk:low`/`risk:high` from its changed paths (the lists in ADR 0020; any path it doesn't know counts as high). A `risk:low` PR auto-merges once required checks pass and an independent `code-reviewer` run on the final diff says APPROVE. Done when tests cover each path class, and on a real PR a low one merges by itself and a high one waits |
 | B6 | Usage brake and ledger | Nothing records what runs cost or stops dispatch when the subscription runs out | Each run's usage, result and duration are appended to a ledger on the `factory-ledger` branch. A run that hits the subscription's usage limit ends as `usage-limit` (not a failure of the step); dispatch pauses until the reset and the inbox says so. The per-run `FACTORY_MAX_BUDGET_USD` stays as a runaway guard. Done when a simulated limit pauses dispatch and the ledger shows each run |
@@ -68,23 +68,24 @@ there. Use the owner's machine for steps that change the templates or factory-pa
 | #7 Factory as a product | Release tags `java-pipeline-vX.Y.Z` with GitHub Releases; new projects pinned to their plugin release (`ref`, `sparsePaths`); changelogs for the plugin and factory-parent, checked on every PR and release; `docs/ONBOARDING.md`; docs link check; java-pipeline 0.16.0 | ADR 0015, PR #8, tag `java-pipeline-v0.16.0` |
 
 ### Waiting on the owner
-- B2, after its PR merges: `claude setup-token`, then `gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo
-  nabiabdallah/claude-factory` (paste the token). Then `gh workflow run factory-step.yml --repo
-  nabiabdallah/claude-factory`: it takes B3, and B2 is done when that ends in a bot PR with green CI.
-- B2a, after its PR merges (it was built by a headless run, so it is the first test of B2's runner): tag
-  `git tag java-pipeline-v0.19.0 <merge commit> && git push origin java-pipeline-v0.19.0`; the release workflow does
-  the rest. Until then, new projects pin 0.18.0, whose `factory-feature.yml` is not valid YAML.
-- The A2 and A3 acceptance run is now part of B3 (`java-pipeline-v0.18.0` is tagged and released). A local
-  scaffold waits at `~/dev/projects/demo-service` (0.18.0, never pushed); B3 provisions the repo instead.
-  `~/dev/projects/demo-service.stale-0.9.1` came from the outdated plugin cache and can be deleted. Update the
-  local plugin (`/plugin`), which is still at 0.9.1.
+- Tag `java-pipeline-v0.19.0` on `1fae21d` (B2a's merge): `git tag java-pipeline-v0.19.0 1fae21d && git push
+  origin java-pipeline-v0.19.0`. Until then, new services pin 0.18.0, whose `factory-feature.yml` isn't valid YAML.
+- B3 setup, once (ADR 0024):
+  1. A fine-grained token at github.com/settings/personal-access-tokens: all repositories; repository permissions
+     Administration, Contents, Secrets, Dependabot secrets, Issues and Workflows set to read and write.
+  2. Settings → Environments → New environment `provisioning`, deployment branches: `main` only. Add the
+     environment secret `FACTORY_ADMIN_TOKEN` (the token from 1).
+  3. The repository secret `FACTORY_PACKAGES_TOKEN` in claude-factory (the `read:packages` token from
+     `~/.m2/settings.xml`).
+  Then `gh workflow run new-service.yml -f name=demo-service -f package=com.example.demo`. Then the A2/A3
+  acceptance run: an issue "GET /hello?name=X returns a greeting" labelled `factory:spec`.
+- Local leftovers: `~/dev/projects/demo-service` (0.18.0, never pushed) and `~/dev/projects/demo-service.stale-0.9.1`
+  can be deleted, since B3 provisions the repo. Update the local plugin (`/plugin`), which is still at 0.9.1.
 - Review payments-service PR #10 (spec 0005).
 - After 2.0.0 is published, Dependabot will open a parent-upgrade PR in payments-service that fails without
   the ADR 0010 code changes. Recommendation: close it, unless the owner wants payments-service upgraded.
-- #1, after its PR merges, each with the owner's yes: make claude-factory and payments-service public
-  (`gh repo edit <repo> --visibility public --accept-visibility-change-consequences`), run
-  `ci/protect-repo.sh nabiabdallah/claude-factory factory` and `ci/protect-repo.sh nabiabdallah/payments-service
-  service`, then check with `gh api repos/<repo>/rulesets` and a PR with a red check that merging is blocked.
+- #1 for payments-service (claude-factory is done, B0): with the owner's yes, make it public and run
+  `ci/protect-repo.sh nabiabdallah/payments-service service`.
 - Set the noreply commit email in both clones (`git config user.email
   99053318+nabiabdallah@users.noreply.github.com`); the sandbox can't write `.git/config`.
 
