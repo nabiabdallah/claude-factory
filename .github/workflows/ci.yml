@@ -61,6 +61,11 @@ jobs:
       - name: Factory App scripts (fake gh)
         run: ci/test-factory-app.sh
 
+      # Headless factory steps (factory ADR 0022): resolve, agent hand-over, the publish job's gate on a fresh
+      # checkout (a rewritten runner can't pass itself), publish; stand-in agent, fake gh, local remote.
+      - name: Factory step runner (stand-in agent, fake gh)
+        run: ci/test-factory-step.sh
+
       - name: Supply-chain checks (SHA-pinned actions, base digest, pinned tools, SBOM)
         run: ci/check-supply-chain.sh plugins/java-pipeline/templates/skeleton
 
