@@ -10,9 +10,12 @@ Decisions are in `docs/factory-adr/`.
 - Fixed: `factory-feature.yml` of 0.19.0 did not load on GitHub: the gate and publish jobs used `${{ runner.temp }}`
   in job-level `env`, where GitHub doesn't allow the runner context, so no unattended run could start. The jobs
   now use `$RUNNER_TEMP` in their commands. Factory CI now lints every workflow with actionlint (ADR 0025).
+- Templates inherit factory-parent 2.1.1, whose base image digest fixes two HIGH zlib CVEs that fail the image scan
+  of a service on 2.1.0.
 
 **Upgrading:** services on 0.19.0: copy `factory-run.sh` and `factory-feature.yml` from `templates/skeleton/.github/`
-again and set `ref` to `java-pipeline-v0.19.1`. No new label, secret or permission is needed.
+again, set `ref` to `java-pipeline-v0.19.1`, and set the factory-parent version in `pom.xml` to 2.1.1 (or merge the
+Dependabot PR for it). No new label, secret or permission is needed.
 
 ## [0.19.0] - 2026-11-12
 

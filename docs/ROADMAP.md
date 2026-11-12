@@ -68,7 +68,8 @@ there. Use the owner's machine for steps that change the templates or factory-pa
 | #7 Factory as a product | Release tags `java-pipeline-vX.Y.Z` with GitHub Releases; new projects pinned to their plugin release (`ref`, `sparsePaths`); changelogs for the plugin and factory-parent, checked on every PR and release; `docs/ONBOARDING.md`; docs link check; java-pipeline 0.16.0 | ADR 0015, PR #8, tag `java-pipeline-v0.16.0` |
 
 ### Waiting on the owner
-- Tag `java-pipeline-v0.19.1` on this fix's merge commit. 0.19.0's `factory-feature.yml` doesn't load on GitHub
+- Tag `factory-parent-v2.1.1` and `java-pipeline-v0.19.1` on this fix's merge commit (parent first: services resolve it
+  from GitHub Packages). 0.19.0's `factory-feature.yml` doesn't load on GitHub
   (ADR 0025), so services pinned to it can't run unattended.
 - demo-service (provisioned 2026-11-12, run 43314997086) is on 0.19.0: after 0.19.1 is tagged, a PR there copies
   the fixed `factory-run.sh` and `factory-feature.yml` and sets `ref`. The App wasn't added to it (the
