@@ -78,8 +78,8 @@ Both secrets hold the same `read:packages` token; GitHub doesn't pass them to PR
 `manifests` green and the branch up to date (0 approvals; admins may bypass only through a PR), secret scanning
 with push protection, Dependabot alerts and security updates, private vulnerability reporting, CodeQL (Java and
 Actions), approval for fork-PR workflows from all outside contributors, and a read-only workflow token. Re-run it
-any time to restore them. Turn on **Settings → Actions → General → Allow GitHub Actions to create and approve
-pull requests** if you want bot-opened PRs.
+any time to restore them. It also allows Actions to open pull requests, which the unattended runner needs (with 0
+required approvals that grants nothing more).
 
 **Check:** the first CI run on `main` is green: `verify` (tests, ArchUnit, Enforcer, coverage floor, Spotless),
 the image scan, `manifests` (deploy gate), and `image` (pushes `ghcr.io/nabiabdallah/customer-service:<sha>`,

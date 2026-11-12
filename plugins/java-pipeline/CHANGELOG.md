@@ -5,6 +5,17 @@ All notable changes to the plugin, newest first ([Keep a Changelog](https://keep
 Each version is tagged `java-pipeline-vX.Y.Z`; projects pin the tag in `.claude/settings.json` (`ref`).
 Decisions are in `docs/factory-adr/`.
 
+## [0.19.2] - 2026-11-13
+
+- Fixed: when GitHub refused the pull request or the push, the run's issue comment only said "the step failed before
+  it could say why". It now gives GitHub's reason, and for "not permitted to create or approve pull requests" the
+  setting that fixes it. Credentials are stripped from the reason, because issue comments aren't masked.
+- claude-factory's `ci/protect-repo.sh` now allows Actions to open pull requests in services too (the runner needs
+  it; the first acceptance run on demo-service was refused). Re-run it on existing services.
+
+**Upgrading:** copy `factory-run.sh` from `templates/skeleton/.github/scripts/` again, set `ref` to
+`java-pipeline-v0.19.2`, and re-run `ci/protect-repo.sh <owner/repo> service` from claude-factory.
+
 ## [0.19.1] - 2026-11-13
 
 - Fixed: `factory-feature.yml` of 0.19.0 did not load on GitHub: the gate and publish jobs used `${{ runner.temp }}`

@@ -49,7 +49,8 @@ echo "$*" >> "$FAKE_GH/calls"
 case "$2" in
   */collaborators/*/permission) cat "$FAKE_GH/permission" ;;
   */branches/*) [[ -f "$FAKE_GH/branch-exists" ]] && echo branch || exit 1 ;;
-  */pulls) echo "https://github.com/acme/demo/pull/7" ;;
+  */pulls) [[ -f "$FAKE_GH/pr-refused" ]] && { echo "gh: GitHub Actions is not permitted to create or approve pull requests. (HTTP 403)" >&2; exit 1; }
+           echo "https://github.com/acme/demo/pull/7" ;;
   */comments\?*) cat "$FAKE_GH/comments.json" 2>/dev/null || echo '[]' ;;
   */comments) echo "https://github.com/acme/demo/issues/5#c" ;;
   *) echo "fake gh: unexpected call: $*" >&2; exit 1 ;;
@@ -228,6 +229,11 @@ check "the issue is told, with the note about CI on token-opened pull requests" 
   grep -qE 'issues/5/comments .*pull/7 is ready for review\. CI does not start' "$FAKE_GH/calls"
 fresh; FACTORY_PR_TOKEN_SET=true expect pass "publish with FACTORY_PR_TOKEN" $FULL
 check "no CI note when FACTORY_PR_TOKEN is set" bash -c '! grep -q "CI does not start" "$FAKE_GH/calls"'
+fresh; touch "$FAKE_GH/pr-refused"; expect fail "a pull request GitHub refuses fails publish" $FULL
+check "(with GitHub's reason and the setting that fixes it)" \
+  grep -q "GitHub refused the pull request: .*not permitted to create or approve pull requests.*Allow GitHub Actions to create" "$work/state-r/failure"
+fresh; FACTORY_PUSH_URL="https://x-access-token:SECRET-TOKEN@127.0.0.1:1/x.git" expect fail "a failed push fails publish" $FULL
+check "(with the reason, and no credentials in it)" bash -c 'grep -q "could not push factory/issue-5" "$0" && ! grep -q SECRET-TOKEN "$0"' "$work/state-r/failure"
 fresh; SCENARIO=workflow; expect fail "a refused run" $TO_GATE
 expect pass "failed names the phase and the reason, without calling GitHub" q:failed
 check "(failed made no GitHub call)" bash -c '! grep -q "issues/5/comments" "$FAKE_GH/calls"'

@@ -68,22 +68,11 @@ there. Use the owner's machine for steps that change the templates or factory-pa
 | #7 Factory as a product | Release tags `java-pipeline-vX.Y.Z` with GitHub Releases; new projects pinned to their plugin release (`ref`, `sparsePaths`); changelogs for the plugin and factory-parent, checked on every PR and release; `docs/ONBOARDING.md`; docs link check; java-pipeline 0.16.0 | ADR 0015, PR #8, tag `java-pipeline-v0.16.0` |
 
 ### Waiting on the owner
-- Tag `factory-parent-v2.1.1` and `java-pipeline-v0.19.1` on this fix's merge commit (parent first: services resolve it
-  from GitHub Packages). 0.19.0's `factory-feature.yml` doesn't load on GitHub
-  (ADR 0025), so services pinned to it can't run unattended.
-- demo-service (provisioned 2026-11-12, run 43314997086) is on 0.19.0: after 0.19.1 is tagged, a PR there copies
-  the fixed `factory-run.sh` and `factory-feature.yml` and sets `ref`. The App wasn't added to it (the
-  fine-grained token was refused; add it at github.com/settings/installations). Its guardrails weren't applied:
-  `ci/protect-repo.sh nabiabdallah/demo-service service`.
-- B3 setup, once (ADR 0024):
-  1. A fine-grained token at github.com/settings/personal-access-tokens: all repositories; repository permissions
-     Administration, Contents, Secrets, Dependabot secrets, Issues and Workflows set to read and write.
-  2. Settings → Environments → New environment `provisioning`, deployment branches: `main` only. Add the
-     environment secret `FACTORY_ADMIN_TOKEN` (the token from 1).
-  3. The repository secret `FACTORY_PACKAGES_TOKEN` in claude-factory (the `read:packages` token from
-     `~/.m2/settings.xml`).
-  Then `gh workflow run new-service.yml -f name=demo-service -f package=com.example.demo`. Then the A2/A3
-  acceptance run: an issue "GET /hello?name=X returns a greeting" labelled `factory:spec`.
+- Tag `java-pipeline-v0.19.2` once its PR merges; then re-run `ci/protect-repo.sh nabiabdallah/demo-service service`.
+- A2/A3 acceptance on demo-service (0.19.1, guardrails applied): issue #3 with `factory:spec` drafted
+  `docs/specs/0001-hello-greeting.md` (Draft, 4 open questions), but GitHub refused the PR: Actions may not open PRs
+  there (fixed in 0.19.2). Retry: delete `factory/spec-3`, then remove and re-add the label. The App isn't on
+  demo-service yet (github.com/settings/installations).
 - Local leftovers: `~/dev/projects/demo-service` (0.18.0, never pushed) and `~/dev/projects/demo-service.stale-0.9.1`
   can be deleted, since B3 provisions the repo. Update the local plugin (`/plugin`), which is still at 0.9.1.
 - Review payments-service PR #10 (spec 0005).

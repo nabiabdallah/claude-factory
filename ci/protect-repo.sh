@@ -48,12 +48,9 @@ tag_ruleset='{
 
 security='{"security_and_analysis": {"secret_scanning": {"status": "enabled"},
   "secret_scanning_push_protection": {"status": "enabled"}}}'
-if [[ "$kind" == factory ]]; then
-  # base-image.yml opens PRs with GITHUB_TOKEN, which needs this switch (ADR 0009).
-  workflow='{"default_workflow_permissions": "read", "can_approve_pull_request_reviews": true}'
-else
-  workflow='{"default_workflow_permissions": "read"}'
-fi
+# Workflows open PRs with GITHUB_TOKEN, which needs this switch: base-image.yml in the factory (ADR 0009), the
+# unattended runner in services (ADRs 0018, 0023). With 0 required approvals, "approve" grants nothing more.
+workflow='{"default_workflow_permissions": "read", "can_approve_pull_request_reviews": true}'
 codeql='{"state": "configured", "languages": ["java-kotlin", "actions"], "query_suite": "default"}'
 
 # --- requests
