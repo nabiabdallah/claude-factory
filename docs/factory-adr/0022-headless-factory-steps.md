@@ -49,5 +49,5 @@ the rewritten publish phase would then run with the workflow's write token.
 - Negative: the run needs the `CLAUDE_CODE_OAUTH_TOKEN` secret in claude-factory, which only the owner can create
   (`claude setup-token`).
 - Negative: the service runner (ADR 0018) still has the single-job weakness. Fixing it changes both templates and
-  needs a plugin release, so it is a separate step (queued as B2a).
+  needs a plugin release, so it is a separate step (queued as B2a, done in [ADR 0023](0023-two-job-service-runner.md)).
 - Negative: an agent that can't finish leaves only an artifact and a job summary, until B7.

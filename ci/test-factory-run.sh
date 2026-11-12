@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Tests a project's .github/scripts/factory-run.sh (factory ADRs 0018 and 0019) on a throwaway copy, without GitHub, Maven
 # or a Claude credential: `gh` is a fake that records its calls, the agent is a stand-in that makes the commits a
-# scenario asks for, and `./mvnw verify` is replaced by a command that passes or fails.
+# scenario asks for, and `./mvnw verify` is replaced by a command that passes or fails. The jobs of the workflow
+# (claude-factory ADR 0023) run in separate clones, handing over only the bundle and the report: the agent job in
+# the project copy, the gate job (q:) and the publish job (r:) in fresh clones of the base commit.
 #   ci/test-factory-run.sh <project-dir>     (a generated project or a template directory)
 set -euo pipefail
 
@@ -37,6 +39,7 @@ g() { git -c user.name=test -c user.email=test@example.invalid "$@"; }
 git add -A && g commit -q -m "project"
 c0="$(git rev-parse HEAD)"
 git init -q --bare "$work/remote.git"
+git clone -q --bare "$work/p" "$work/base.git"
 
 # Fake gh: answers from files in $FAKE_GH, appends every call to $FAKE_GH/calls.
 mkdir -p "$work/bin" "$work/gh"
@@ -95,6 +98,17 @@ case "$SCENARIO" in
   skip-tests) sed -i 's|</parent>|</parent><properties><skipTests>true</skipTests></properties>|' pom.xml ;;
   dependency) sed -i 's|</parent>|</parent><properties><demo.version>1.0.0</demo.version></properties>|' pom.xml ;;
   delete-test) git rm -q "$SOME_TEST" ;;
+  # The agent rewrites the runner so its gate would pass anything: the gate job must not run that copy.
+  tamper) cat > .github/scripts/factory-run.sh <<'EVIL'
+#!/bin/sh
+# passes every gate, and hands over its own bundle
+[ "$1" = pack ] && git bundle create "$FACTORY_STATE/agent.bundle" "refs/heads/factory/issue-$ISSUE_NUMBER" "^$(cat "$FACTORY_STATE/base")" >/dev/null 2>&1
+exit 0
+EVIL
+          echo "# changed" >> .github/workflows/ci.yml ;;
+  # History that doesn't start from the base commit.
+  unrelated) git checkout -q --orphan tmp; echo x > x.txt; git add x.txt
+             g commit -qm orphan; git branch -M tmp "factory/issue-$ISSUE_NUMBER" ;;
   *) echo "unknown scenario $SCENARIO" >&2; exit 2 ;;
 esac
 [[ $report -eq 0 ]] || printf '## What was built\nGreeter.\n' > "$FACTORY_REPORT"
@@ -104,29 +118,48 @@ echo '{"result":"done"}'
 SH
 chmod +x "$work/bin/gh" "$work/bin/agent"
 
-export PATH="$work/bin:$PATH" FAKE_GH="$work/gh" ARCH="$arch" SOME_TEST="$some_test"
+export work PATH="$work/bin:$PATH" FAKE_GH="$work/gh" ARCH="$arch" SOME_TEST="$some_test"
 export GITHUB_REPOSITORY=acme/demo ISSUE_NUMBER=5 SENDER=owner GH_TOKEN=t
 export FACTORY_STATE="$work/state" FACTORY_AGENT_CMD=agent FACTORY_PLUGIN_DIR="$work/p" FACTORY_PUSH_URL="$work/remote.git"
 export FACTORY_GIT_NAME=test FACTORY_GIT_EMAIL=test@example.invalid
 run=.github/scripts/factory-run.sh
 fails=0
+TO_GATE="resolve agent pack q:unpack q:gate"
+FULL="$TO_GATE r:unpack r:gate r:publish"
 
 fresh() { # back to the untouched project, no state, a collaborator with write access, no existing branch
   git switch -q main 2>/dev/null || true
   git reset -q --hard "$c0"; git clean -qfd
   git branch -q -D factory/issue-5 factory/spec-5 2>/dev/null || true
-  rm -rf "$FACTORY_STATE" "$FAKE_GH"/*
+  rm -rf "$FACTORY_STATE" "$FAKE_GH"/* "$work/q" "$work/r" "$work/state-q" "$work/state-r"
   git --git-dir "$work/remote.git" update-ref -d refs/heads/factory/issue-5
   git --git-dir "$work/remote.git" update-ref -d refs/heads/factory/spec-5
   unset FACTORY_LABEL ISSUE_TITLE
   echo write > "$FAKE_GH/permission"
   export ISSUE_BODY="Please build docs/specs/0001-greet.md" FACTORY_VERIFY_CMD=true SCENARIO=good
 }
+runphase() { # <phase>: in the agent job's clone, or q:<phase> (gate job) / r:<phase> (publish job) in a fresh clone of the base
+  local ph="$1" job a="$FACTORY_STATE" dir
+  case "$ph" in
+    q:*|r:*) ;;
+    *) "$run" "$ph"; return ;;
+  esac
+  job="${ph%%:*}"; ph="${ph#*:}"; dir="$work/$job"
+  if [[ "$ph" == unpack ]]; then
+    rm -rf "$dir" "$work/state-$job"; git clone -q "$work/base.git" "$dir"; git -C "$dir" checkout -q --detach "$c0"
+    cp "$dir/$run" "$work/trusted-$job.sh"   # the workflow keeps this copy outside the tree the agent wrote
+  fi
+  # What the jobs get: the agent job's outputs from before the agent ran, the artifact, and for publish the gated commit.
+  ( cd "$dir" && FACTORY_STATE="$work/state-$job" FACTORY_HANDOFF="$a" FACTORY_MODE="$(cat "$a/mode")" \
+      FACTORY_BRANCH="$(cat "$a/branch")" FACTORY_BASE="$(cat "$a/base")" FACTORY_BASE_BRANCH="$(cat "$a/base-branch")" \
+      FACTORY_SPEC="$(cat "$a/spec" 2>/dev/null || true)" FACTORY_GATE_BUILD="$([[ "$job" == r ]] && echo 0 || echo 1)" \
+      FACTORY_GATED_SHA="${GATED:-$(git -C "$work/q" rev-parse HEAD 2>/dev/null || true)}" "$work/trusted-$job.sh" "$ph" )
+}
 expect() { # expect pass|fail <description> <phase>...
   local want="$1" desc="$2" got=pass out="" phase
   shift 2
   for phase in "$@"; do
-    if ! out="$("$run" "$phase" 2>&1)"; then got=fail; break; fi
+    if ! out="$(runphase "$phase" 2>&1)"; then got=fail; break; fi
   done
   if [[ "$got" == "$want" ]]; then
     echo "ok   - $desc"
@@ -160,51 +193,66 @@ fresh; git rm -q --cached .claude/settings.json; echo '{}' > .claude/settings.js
 expect fail "a project that doesn't pin the plugin release is refused" resolve
 
 # agent + gate: the run only counts if the change is clean and the build is green
-fresh; expect pass "a committed change with a report and a green build passes the gate" resolve agent gate
+fresh; expect pass "a committed change with a report and a green build passes the gate" $TO_GATE
 check "the agent got the skill, the spec, the plugin directory and a budget" \
   grep -qE '/java-pipeline:new-feature .*docs/specs/0001-greet\.md.* --plugin-dir .* --max-budget-usd 25' "$FAKE_GH/agent-args"
 check "the change is on the issue's branch" test "$(git rev-parse --abbrev-ref HEAD)" = factory/issue-5
-fresh; FACTORY_VERIFY_CMD=false; expect fail "a red build fails the run" resolve agent gate
+fresh; FACTORY_VERIFY_CMD=false; expect fail "a red build fails the run" $TO_GATE
 fresh; unset FACTORY_AGENT_CMD; PATH="$work/bin:/usr/bin:/bin" expect fail "no Claude credential stops the run before the agent" resolve agent
 export FACTORY_AGENT_CMD=agent
 for s in crash no-commit no-report leftovers architecture-test workflow settings spec promotion coverage skip-tests delete-test; do
-  fresh; SCENARIO="$s"; expect fail "gate refuses: $s" resolve agent gate
+  fresh; SCENARIO="$s"; expect fail "gate refuses: $s" $TO_GATE
 done
-fresh; SCENARIO=dependency; expect pass "an ordinary pom.xml change is allowed" resolve agent gate
+fresh; SCENARIO=dependency; expect pass "an ordinary pom.xml change is allowed" $TO_GATE
 check "(the pom.xml change really was in that commit)" bash -c "git show --stat HEAD | grep -q pom.xml"
 
+# the agent can't make the gate pass by rewriting the runner, and the history must start from the base
+fresh; SCENARIO=tamper; expect fail "an agent that rewrites the runner is refused by the base's own copy" $TO_GATE
+check "(it was refused for the protected files, not for something else)" \
+  grep -q 'changed a protected file: \.github/scripts/factory-run\.sh' "$work/state-q/failure"
+fresh; SCENARIO=unrelated; expect fail "history that doesn't start from the base is refused" $TO_GATE
+check "(by the unpack phase)" grep -q 'does not start from the base' "$work/state-q/failure"
+
 # publish and failure reports
-fresh; expect pass "publish pushes the branch and opens the pull request" resolve agent gate publish
+fresh; GATED=0000000000000000000000000000000000000000 expect fail "publish refuses a commit the gate job did not verify" $FULL
+check "(and pushed nothing)" bash -c '! git --git-dir "$0/remote.git" rev-parse --verify -q refs/heads/factory/issue-5' "$work"
+fresh; expect pass "the publish job builds nothing (a red build command is not run there)" $TO_GATE
+FACTORY_VERIFY_CMD=false expect pass "(publish job)" r:unpack r:gate r:publish
+fresh; expect pass "publish pushes the branch and opens the pull request" $FULL
 check "the branch is on the remote" git --git-dir "$work/remote.git" rev-parse --verify -q refs/heads/factory/issue-5
 check "the pull request targets main from the issue's branch, titled after the spec" \
   grep -qE 'repos/acme/demo/pulls -f title=feat: Greet a customer \(#5\) -f head=factory/issue-5 -f base=main' "$FAKE_GH/calls"
 check "the pull request body carries the report and closes the issue" \
-  grep -qzE 'What was built.*Closes #5' "$FACTORY_STATE/pr-body.md"
+  grep -qzE 'What was built.*Closes #5' "$work/state-r/pr-body.md"
 check "the issue is told, with the note about CI on token-opened pull requests" \
   grep -qE 'issues/5/comments .*pull/7 is ready for review\. CI does not start' "$FAKE_GH/calls"
-fresh; FACTORY_PR_TOKEN_SET=true expect pass "publish with FACTORY_PR_TOKEN" resolve agent gate publish
+fresh; FACTORY_PR_TOKEN_SET=true expect pass "publish with FACTORY_PR_TOKEN" $FULL
 check "no CI note when FACTORY_PR_TOKEN is set" bash -c '! grep -q "CI does not start" "$FAKE_GH/calls"'
-fresh; SCENARIO=workflow; expect fail "a refused run" resolve agent gate
-expect pass "failed reports to the issue" failed
+fresh; SCENARIO=workflow; expect fail "a refused run" $TO_GATE
+expect pass "failed names the phase and the reason, without calling GitHub" q:failed
+check "(failed made no GitHub call)" bash -c '! grep -q "issues/5/comments" "$FAKE_GH/calls"'
+FACTORY_WHY="$(cat "$work/state-q/failure")" FACTORY_AT="$(cat "$work/state-q/phase")" expect pass "the report job tells the issue" report
 check "the issue comment names the phase and the reason" \
   grep -qE 'issues/5/comments .*stopped in the `gate` phase: gate refused the change: changed a protected file: \.github/workflows/ci\.yml' "$FAKE_GH/calls"
+fresh; FACTORY_WHY="" FACTORY_AT="" expect pass "a run that was cancelled or timed out is reported too" report
+check "(with that reason)" grep -qE 'issues/5/comments .*cancelled or timed out' "$FAKE_GH/calls"
 check "a refused run pushed nothing" bash -c '! git --git-dir "$0/remote.git" rev-parse --verify -q refs/heads/factory/issue-5' "$work"
 
 # factory:spec — an idea becomes a spec pull request (ADR 0019)
 idea() { fresh; export FACTORY_LABEL=factory:spec ISSUE_TITLE="Say goodbye" ISSUE_BODY='factory-run-test idea marker $(touch pwned2)' SCENARIO="$1"; }
-idea spec-draft; expect pass "an idea becomes a draft spec pull request" resolve agent gate publish
+idea spec-draft; expect pass "an idea becomes a draft spec pull request" $FULL
 check "the agent was given the intake skill and the idea as a file, not as text" \
   bash -c 'grep -qE "/java-pipeline:intake .*The idea is in the file " "$FAKE_GH/agent-args" && ! grep -q "idea marker" "$FAKE_GH/agent-args"'
 check "nothing in the idea was executed" test ! -e pwned2
 check "the spec branch is on the remote" git --git-dir "$work/remote.git" rev-parse --verify -q refs/heads/factory/spec-5
 check "the pull request is titled as a spec and doesn't close the issue" \
-  bash -c 'grep -qE "pulls -f title=spec: Farewell a customer \(#5\) -f head=factory/spec-5 -f base=main" "$FAKE_GH/calls" && grep -q "Refs #5" "$FACTORY_STATE/pr-body.md" && ! grep -q "Closes" "$FACTORY_STATE/pr-body.md"'
+  bash -c 'grep -qE "pulls -f title=spec: Farewell a customer \(#5\) -f head=factory/spec-5 -f base=main" "$FAKE_GH/calls" && grep -q "Refs #5" "$work/state-r/pr-body.md" && ! grep -q "Closes" "$work/state-r/pr-body.md"'
 check "a draft tells the owner to answer the open questions before merging" \
   grep -qE 'issues/5/comments .*adds `docs/specs/0005-farewell\.md`\. Answer its open questions .*factory:build' "$FAKE_GH/calls"
-idea spec-approved; expect pass "a spec without open questions may say Approved (the merge approves it)" resolve agent gate publish
-check "an approved draft tells the owner that merging approves it" grep -q 'merging this pull request approves it' "$FACTORY_STATE/pr-body.md"
+idea spec-approved; expect pass "a spec without open questions may say Approved (the merge approves it)" $FULL
+check "an approved draft tells the owner that merging approves it" grep -q 'merging this pull request approves it' "$work/state-r/pr-body.md"
 for s in spec-approved-with-questions spec-no-status spec-bad-name spec-missing-section spec-no-criteria spec-and-code spec-edits-another spec-two no-commit no-report leftovers; do
-  idea "$s"; expect fail "spec gate refuses: $s" resolve agent gate
+  idea "$s"; expect fail "spec gate refuses: $s" $TO_GATE
 done
 idea spec-draft; ISSUE_TITLE="" ISSUE_BODY=""; expect fail "an empty issue is refused" resolve
 idea spec-draft; echo read > "$FAKE_GH/permission"; expect fail "someone with read access can't start a spec run" resolve

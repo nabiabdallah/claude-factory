@@ -5,6 +5,20 @@ All notable changes to the plugin, newest first ([Keep a Changelog](https://keep
 Each version is tagged `java-pipeline-vX.Y.Z`; projects pin the tag in `.claude/settings.json` (`ref`).
 Decisions are in `docs/factory-adr/`.
 
+## [0.19.0] - 2026-11-12
+
+- The unattended runner is split in four jobs (ADR 0023): the agent hands over a git bundle and its report; the
+  gate (including `./mvnw verify`) runs on a fresh checkout of the base commit with a read-only token; the publish
+  job runs on another, with the write token and no build, and pushes only the commit the gate verified. A rewritten
+  `factory-run.sh` can no longer pass its own gate or publish with the write token. A failed, cancelled or
+  timed-out run is reported to the issue by a fourth job.
+- Fixed: `factory-feature.yml` of 0.17.0 and 0.18.0 was not valid YAML (an unquoted `spec: ` in a step name), so the
+  workflow could not start.
+
+**Upgrading:** services that copied the 0.17.0 or 0.18.0 runner: copy `factory-run.sh` and `factory-feature.yml` from
+`templates/skeleton/.github/` again (they are one pair: the new workflow needs the new script's phases), and set
+`ref` to `java-pipeline-v0.19.0`. No new label, secret or permission is needed.
+
 ## [0.18.0] - 2026-11-11
 
 - New skill `/java-pipeline:intake <idea>`: drafts a spec in `docs/specs/` from the template, grounded in the

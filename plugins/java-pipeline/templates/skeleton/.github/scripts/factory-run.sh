@@ -4,13 +4,20 @@
 #                   pull request that adds it. Merging that pull request is how the owner approves the spec.
 #   factory:build   the issue names an approved spec (in its text, or in the run's own "spec drafted" comment);
 #                   the `new-feature` skill builds it and the run ends in a pull request with the code.
-# The workflow .github/workflows/factory-feature.yml calls the phases in order:
-#   resolve   who asked, what to do, which branch, which plugin release
-#   tools     install the pinned Claude Code CLI and fetch the pinned plugin
-#   agent     run the skill (the agent has no token that can write to GitHub)
-#   gate      spec: exactly one new, complete spec file. build: committed, protected files untouched, `./mvnw verify` green
-#   publish   push the branch and open the pull request
-#   failed    tell the issue which phase stopped the run
+# The workflow .github/workflows/factory-feature.yml runs the phases in four jobs, so nothing the agent touched
+# ever runs with a token that can write (claude-factory ADR 0023):
+#   agent job    (no token that can write; the Claude credential)
+#     resolve   who asked, what to do, which branch, which plugin release
+#     tools     install the pinned Claude Code CLI and fetch the pinned plugin
+#     agent     run the skill
+#     pack      everything committed, a report written; hand over a git bundle of the commits and the report
+#   gate job     (a fresh checkout of the base commit, read-only token: this script is the one the owner merged)
+#     unpack    the bundle holds commits on top of the base
+#     gate      spec: exactly one new, complete spec file. build: protected files untouched, `./mvnw verify` green
+#   publish job  (a fresh checkout of the base commit, the write token; it builds nothing)
+#     unpack, gate (checks only, no build), publish   push the gated commit and open the pull request
+#   report job   tell the issue which phase stopped the run
+#   failed       in a job that failed: say why in the job summary and as a job output
 # State is kept between phases in $FACTORY_STATE. Tested with a fake `gh` and a stand-in agent by
 # claude-factory's ci/test-factory-run.sh.
 set -euo pipefail
@@ -25,10 +32,11 @@ mkdir -p "$state"
 die() { echo "factory-run: $*" >&2; echo "$*" > "$state/failure"; exit 1; }
 need() { local v; for v in "$@"; do [[ -n "${!v:-}" ]] || die "$v is not set"; done; }
 saved() { [[ -s "$state/$1" ]] || die "no '$1' from an earlier phase (run the phases in order)"; cat "$state/$1"; }
+output() { [[ -z "${GITHUB_OUTPUT:-}" ]] || echo "$1=$2" >> "$GITHUB_OUTPUT"; }
 
 phase="${1:-}"
-[[ -n "$phase" ]] || { echo "usage: factory-run.sh resolve|tools|agent|gate|publish|failed" >&2; exit 2; }
-[[ "$phase" == failed ]] || echo "$phase" > "$state/phase"
+[[ -n "$phase" ]] || { echo "usage: factory-run.sh resolve|tools|agent|pack|unpack|gate|publish|failed|report" >&2; exit 2; }
+[[ "$phase" == failed || "$phase" == report ]] || echo "$phase" > "$state/phase"
 
 case "$phase" in
   resolve)
@@ -84,6 +92,9 @@ case "$phase" in
     echo "$ref" > "$state/plugin-ref"
     git rev-parse HEAD > "$state/base"
     git rev-parse --abbrev-ref HEAD > "$state/base-branch"
+    # What the later jobs need, fixed before the agent runs.
+    output mode "$mode"; output branch "$branch"; output base "$(cat "$state/base")"
+    output base_branch "$(cat "$state/base-branch")"; output spec "$(cat "$state/spec" 2>/dev/null || true)"
     echo "factory-run: issue #$ISSUE_NUMBER, $mode run, branch $branch, plugin $ref"
     ;;
 
@@ -130,6 +141,46 @@ case "$phase" in
     [[ $status -eq 0 ]] || die "the agent stopped with exit code $status (see the agent-run artifact)"
     ;;
 
+  pack)
+    mode="$(saved mode)"; branch="$(saved branch)"; base="$(saved base)"
+    [[ "$(git rev-parse --abbrev-ref HEAD)" == "$branch" ]] || die "the agent left the branch $branch"
+    [[ "$(git rev-list --count "$base..HEAD")" -gt 0 ]] || die "the agent committed nothing"
+    leftovers="$(git status --porcelain)"
+    [[ -z "$leftovers" ]] || die "uncommitted or untracked files left behind: $(tr '\n' ' ' <<<"$leftovers")"
+    [[ -s "$state/report.md" ]] || die "no hand-off report was written"
+    git bundle create "$state/agent.bundle" "refs/heads/$branch" "^$base" >/dev/null 2>&1 || die "could not bundle the commits"
+    echo "factory-run: packed $(git rev-list --count "$base..HEAD") commits"
+    ;;
+
+  unpack)
+    # Runs from a checkout of the base commit, with this script as the owner merged it. MODE, BRANCH, BASE, BASE_BRANCH
+    # and SPEC are the agent job's outputs from before the agent ran; the bundle and the report come from the agent
+    # and are checked, not trusted.
+    need FACTORY_MODE FACTORY_BRANCH FACTORY_BASE FACTORY_BASE_BRANCH FACTORY_HANDOFF ISSUE_NUMBER
+    [[ "$ISSUE_NUMBER" =~ ^[0-9]+$ ]] || die "issue number is not a number"
+    case "$FACTORY_MODE" in
+      build) [[ "$FACTORY_BRANCH" == "factory/issue-$ISSUE_NUMBER" ]] || die "unexpected branch from the agent job"
+             [[ "${FACTORY_SPEC:-}" =~ ^$spec_path$ ]] || die "unexpected spec from the agent job"
+             echo "$FACTORY_SPEC" > "$state/spec" ;;
+      spec) [[ "$FACTORY_BRANCH" == "factory/spec-$ISSUE_NUMBER" ]] || die "unexpected branch from the agent job" ;;
+      *) die "unexpected mode from the agent job" ;;
+    esac
+    [[ "$FACTORY_BASE" =~ ^[0-9a-f]{40}$ && "$FACTORY_BASE_BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]] || die "unexpected base from the agent job"
+    [[ "$(git rev-parse HEAD)" == "$FACTORY_BASE" ]] || die "this checkout is not the base commit $FACTORY_BASE"
+    bundle="$FACTORY_HANDOFF/agent.bundle"; report="$FACTORY_HANDOFF/report.md"
+    [[ -f "$bundle" && -s "$report" ]] || die "the agent job handed over no bundle or no report"
+    (( $(wc -c < "$report") <= 60000 )) || die "the report is over 60000 bytes"
+    git bundle verify -q "$bundle" >/dev/null 2>&1 || die "the bundle is not valid on top of the base"
+    git fetch -q "$bundle" "refs/heads/$FACTORY_BRANCH:refs/heads/$FACTORY_BRANCH" 2>/dev/null || die "the bundle has no $FACTORY_BRANCH"
+    git merge-base --is-ancestor "$FACTORY_BASE" "$FACTORY_BRANCH" || die "$FACTORY_BRANCH does not start from the base"
+    [[ "$(git rev-list --count "$FACTORY_BASE..$FACTORY_BRANCH")" -gt 0 ]] || die "the agent committed nothing"
+    git switch --quiet "$FACTORY_BRANCH"
+    cp "$report" "$state/report.md"
+    echo "$FACTORY_MODE" > "$state/mode"; echo "$FACTORY_BRANCH" > "$state/branch"
+    echo "$FACTORY_BASE" > "$state/base"; echo "$FACTORY_BASE_BRANCH" > "$state/base-branch"
+    echo "factory-run: unpacked $(git rev-list --count "$FACTORY_BASE..HEAD") commits on $FACTORY_BRANCH"
+    ;;
+
   gate)
     mode="$(saved mode)"; base="$(saved base)"
     problems=()
@@ -164,6 +215,7 @@ case "$phase" in
         printf 'factory-run: %s\n' "${problems[@]}" >&2
         die "gate refused the spec: ${problems[0]}$([[ ${#problems[@]} -gt 1 ]] && echo " (and $(( ${#problems[@]} - 1 )) more, see the log)")"
       fi
+      output head "$(git rev-parse HEAD)"
       echo "factory-run: gate passed (spec $spec, status $status)"
       exit 0
     fi
@@ -192,19 +244,27 @@ case "$phase" in
       die "gate refused the change: ${problems[0]}$([[ ${#problems[@]} -gt 1 ]] && echo " (and $(( ${#problems[@]} - 1 )) more, see the log)")"
     fi
 
-    # The build decides, not the agent's word: the Stop hook gives up after 3 attempts, this doesn't.
-    if ! ${FACTORY_VERIFY_CMD:-./mvnw -B -q verify} > "$state/verify.log" 2>&1; then
-      tail -n 60 "$state/verify.log" >&2
-      die "./mvnw verify is red on the agent's change"
+    # The build decides, not the agent's word: the Stop hook gives up after 3 attempts, this doesn't. It runs the
+    # agent's code, so it runs in the gate job, which holds no token that can write. The publish job repeats the
+    # checks above with FACTORY_GATE_BUILD=0 and builds nothing.
+    if [[ "${FACTORY_GATE_BUILD:-1}" != 0 ]]; then
+      if ! ${FACTORY_VERIFY_CMD:-./mvnw -B -q verify} > "$state/verify.log" 2>&1; then
+        tail -n 60 "$state/verify.log" >&2
+        die "./mvnw verify is red on the agent's change"
+      fi
+      [[ -z "$(git status --porcelain)" ]] || die "the build changed tracked files (formatting not applied before commit?)"
     fi
-    [[ -z "$(git status --porcelain)" ]] || die "the build changed tracked files (formatting not applied before commit?)"
-    echo "factory-run: gate passed ($(git rev-list --count "$base..HEAD") commits, verify green)"
+    output head "$(git rev-parse HEAD)"
+    echo "factory-run: gate passed ($(git rev-list --count "$base..HEAD") commits$([[ "${FACTORY_GATE_BUILD:-1}" != 0 ]] && echo ", verify green"))"
     ;;
 
   publish)
     need GITHUB_REPOSITORY ISSUE_NUMBER GH_TOKEN
     spec="$(saved spec)"; branch="$(saved branch)"; base_branch="$(saved base-branch)"
     mode="$(saved mode)"
+    # Only the commit the gate job built and tested is published.
+    need FACTORY_GATED_SHA
+    [[ "$(git rev-parse HEAD)" == "$FACTORY_GATED_SHA" ]] || die "the commit to publish is not the one the gate job verified"
     title="$(sed -n 's/^# Spec: *//p' "$spec" | head -n 1)"
     [[ -n "$title" ]] || title="$(basename "$spec" .md)"
 
@@ -244,11 +304,23 @@ case "$phase" in
     ;;
 
   failed)
-    need GITHUB_REPOSITORY ISSUE_NUMBER
+    # In a job that failed: no GitHub call, so no token is needed. The report job tells the issue.
     why="$(cat "$state/failure" 2>/dev/null || echo "the step failed before it could say why")"
     at="$(cat "$state/phase" 2>/dev/null || echo "start")"
+    why="$(tr -s '\r\n\t' ' ' <<<"$why" | cut -c1-500)"
+    output why "$why"; output at "$at"
+    echo "factory-run: stopped in the $at phase: $why" >&2
+    [[ -z "${GITHUB_STEP_SUMMARY:-}" ]] || echo "Stopped in the \`$at\` phase: $why" >> "$GITHUB_STEP_SUMMARY"
+    ;;
+
+  report)
+    need GITHUB_REPOSITORY ISSUE_NUMBER
+    why="${FACTORY_WHY:-$(cat "$state/failure" 2>/dev/null || true)}"
+    at="${FACTORY_AT:-$(cat "$state/phase" 2>/dev/null || true)}"
+    [[ -n "$why" ]] || { why="the run was cancelled or timed out"; at="${at:-unknown}"; }
+    why="$(tr -s '\r\n\t' ' ' <<<"$why" | cut -c1-500)"
     gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" \
-      -f body="Factory run stopped in the \`$at\` phase: $why${FACTORY_RUN_URL:+ ([run]($FACTORY_RUN_URL))}. No pull request was opened. Fix the cause, then remove and re-add the label." \
+      -f body="Factory run stopped in the \`${at:-start}\` phase: $why${FACTORY_RUN_URL:+ ([run]($FACTORY_RUN_URL))}. No pull request was opened. Fix the cause, then remove and re-add the label." \
       --jq .html_url >/dev/null || echo "factory-run: could not comment on the issue" >&2
     ;;
 

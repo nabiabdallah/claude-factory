@@ -50,6 +50,10 @@ for t in plugins/java-pipeline/templates/*; do
   ! grep -qE '^\s+run:.*\$\{\{' "$wf" || problem "$wf: a run command interpolates an expression (pass it through env)"
   agent_step=$(sed -n '/factory-run.sh agent/,/^      - name:/p' "$wf")
   ! grep -qE 'GH_TOKEN|GITHUB_TOKEN|github\.token|FACTORY_PR_TOKEN' <<<"$agent_step" || problem "$wf: the agent step is given a GitHub token"
+  # ADR 0023: the agent job can't write, and what runs on the agent's tree is only ever a copy from the base.
+  agent_job=$(sed -n '/^  agent:/,/^  gate:/p' "$wf")
+  ! grep -qE '^\s+[a-z-]+: write\b' <<<"$agent_job" || problem "$wf: the agent job asks for a write permission"
+  ! grep -qE 'factory-run\.sh (unpack|gate|publish)' "$wf" || problem "$wf: unpack, gate and publish must run the copy kept outside the checkout"
   if [[ -z "$first" ]]; then first="$t"; else
     cmp -s "$first/.github/scripts/factory-run.sh" "$runner" || problem "$runner differs from $first's"
     cmp -s "$first/.github/workflows/factory-feature.yml" "$wf" || problem "$wf differs from $first's"
