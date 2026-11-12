@@ -16,5 +16,12 @@ and the next step. Update it in the PR that finishes a step.
   rulesets, the tier classifier, the App's permissions or where secrets come from, delete a repo, force-push.
 - Stop and report instead of guessing when: CI is still red after 3 fix rounds, the step needs a decision only
   the owner can make, or finishing it would need something on the never list.
+- Headless step runs (`FACTORY_HEADLESS=1`, ADR 0022): nobody can answer. Do only the step the prompt names.
+  Commit on the current branch; don't push, open PRs, tag or call GitHub (you hold no GitHub token; the workflow
+  publishes). Before finishing, run the factory checks your change touches (`ci/*.sh`, `ci/check-docs.sh`,
+  template builds with `./mvnw`, no sandbox wrapper needed). Write the PR description to `$FACTORY_REPORT`:
+  first line `# <conventional PR title>`, then the plan, the changes by file, what you ran with its result, and
+  what the owner must do after merging. Update the roadmap as for any step. If the step needs the owner's
+  decision or something on the never list, say so in the report and stop.
 - Stage files by path; never `git add -A` / `git add .`.
 - Done means factory CI is green: templates build, skills run on fresh projects, the image scan passes.

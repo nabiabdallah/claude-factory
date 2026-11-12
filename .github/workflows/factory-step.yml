@@ -1,0 +1,132 @@
+name: Factory step
+
+# Runs the next queued step of docs/ROADMAP.md headless and ends in a pull request opened by the factory's App
+# (factory ADR 0022). Two jobs, so nothing the agent touched runs with a write token:
+#   agent    checkout without credentials, the Claude credential only; hands over a git bundle and a report
+#   publish  a fresh checkout of the base commit; gates the bundle and pushes it with an App token
+# Secrets: CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY), FACTORY_APP_KEY. Variables: FACTORY_APP_CLIENT_ID,
+# FACTORY_APP_SLUG, optional FACTORY_MAX_BUDGET_USD (per run, default 25) and FACTORY_PAUSED (true stops runs).
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        description: "Queue step to run, e.g. B3 (empty: the first unfinished one)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: factory-step
+  cancel-in-progress: false
+
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      pull-requests: read # resolve: is a step PR already open?
+    outputs:
+      step: ${{ steps.resolve.outputs.step }}
+      branch: ${{ steps.resolve.outputs.branch }}
+      base: ${{ steps.resolve.outputs.base }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Which step (refuses while paused or while a step PR is open)
+        id: resolve
+        run: .github/scripts/factory-step.sh resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STEP: ${{ inputs.step }}
+          FACTORY_PAUSED: ${{ vars.FACTORY_PAUSED }}
+
+      - name: Commit as the factory's bot
+        run: .github/scripts/bot-identity.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_SLUG: ${{ vars.FACTORY_APP_SLUG }}
+
+      - name: Install the pinned Claude Code CLI
+        run: .github/scripts/factory-step.sh tools
+
+      - name: Run the step
+        run: .github/scripts/factory-step.sh agent
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FACTORY_MAX_BUDGET_USD: ${{ vars.FACTORY_MAX_BUDGET_USD }}
+
+      - name: Hand over the commits (git bundle) and the report
+        run: .github/scripts/factory-step.sh pack
+
+      - name: Say why the run stopped
+        if: failure()
+        run: .github/scripts/factory-step.sh failed
+
+      - name: Keep the hand-over and the agent's result
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: agent-step
+          path: |
+            ${{ runner.temp }}/factory-step/agent.bundle
+            ${{ runner.temp }}/factory-step/report.md
+            ${{ runner.temp }}/factory-step/agent.json
+            ${{ runner.temp }}/factory-step/failure
+          if-no-files-found: ignore
+
+  publish:
+    needs: agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      STEP: ${{ needs.agent.outputs.step }}
+      BRANCH: ${{ needs.agent.outputs.branch }}
+      BASE: ${{ needs.agent.outputs.base }}
+      FACTORY_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      # The base commit, not the agent's tree: the gate and publish code here is what the owner merged.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.agent.outputs.base }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: agent-step
+          path: ${{ runner.temp }}/handoff
+
+      - name: Gate (commits on the base, no deleted tests; protected files make it risk:high)
+        run: .github/scripts/factory-step.sh gate
+        env:
+          FACTORY_HANDOFF: ${{ runner.temp }}/handoff
+
+      - name: Mint an App token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.FACTORY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FACTORY_APP_KEY }}
+
+      - name: Push the branch and open the pull request as the bot
+        run: .github/scripts/factory-step.sh publish
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+
+      - name: Say why the run stopped
+        if: failure()
+        run: .github/scripts/factory-step.sh failed
