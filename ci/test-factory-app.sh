@@ -9,6 +9,7 @@ set -euo pipefail
 work="$(mktemp -d "${TMPDIR:-/tmp}/factory-app-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 fails=0
+root="$PWD"
 ok() { echo "ok   - $1"; }
 bad() { echo "FAIL - $1"; fails=1; }
 expect() { if eval "$2"; then ok "$1"; else bad "$1"; fi; }
@@ -81,13 +82,13 @@ elif grep -q '^secret set' "$FAKE_GH_LOG"; then bad "convert sets a secret from 
 
 # --- bot-identity.sh
 repo="$work/repo"; git init -q "$repo"
-(cd "$repo" && APP_SLUG=factory-bot "$OLDPWD/.github/scripts/bot-identity.sh" >/dev/null)
+(cd "$repo" && APP_SLUG=factory-bot "$root/.github/scripts/bot-identity.sh" >/dev/null)
 expect "bot-identity: App bot as author" \
   "[[ \$(git -C '$repo' config user.name) == 'factory-bot[bot]' && \$(git -C '$repo' config user.email) == '4242+factory-bot[bot]@users.noreply.github.com' ]]"
-(cd "$repo" && APP_SLUG= "$OLDPWD/.github/scripts/bot-identity.sh" >/dev/null)
+(cd "$repo" && APP_SLUG= "$root/.github/scripts/bot-identity.sh" >/dev/null)
 expect "bot-identity: github-actions[bot] without an App" \
   "[[ \$(git -C '$repo' config user.email) == '41898282+github-actions[bot]@users.noreply.github.com' ]]"
-expect "bot-identity: rejects an odd slug" "! (cd '$repo' && APP_SLUG='x\$(id)' '$OLDPWD/.github/scripts/bot-identity.sh' >/dev/null 2>&1)"
+expect "bot-identity: rejects an odd slug" "! (cd '$repo' && APP_SLUG='x\$(id)' '$root/.github/scripts/bot-identity.sh' >/dev/null 2>&1)"
 
 # --- workflows: the key reaches only the token action; no expression inside a run command
 key_ok='private-key: [$][{][{] secrets[.]FACTORY_APP_KEY [}][}]$|HAS_KEY: [$][{][{] secrets[.]FACTORY_APP_KEY != .. [}][}]$'
