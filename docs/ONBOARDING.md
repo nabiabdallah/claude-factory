@@ -59,6 +59,11 @@ enable the plugin if it's missing.
 
 ## 5. Put it on GitHub
 
+**Or let the factory do steps 4, 5 and 7's setup** ([ADR 0024](factory-adr/0024-service-provisioning.md)):
+`gh workflow run new-service.yml --repo nabiabdallah/claude-factory -f name=customer-service -f
+package=com.example.customers`. It scaffolds from the latest release, creates the public repo, sets its secrets
+and labels, adds the factory's App and applies the guardrails. The by-hand route follows.
+
 ```bash
 git config user.email 99053318+nabiabdallah@users.noreply.github.com   # public repo: no private email in commits
 gh repo create nabiabdallah/customer-service --public --source . --push

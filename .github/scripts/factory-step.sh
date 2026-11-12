@@ -25,9 +25,9 @@ need() { local v; for v in "$@"; do [[ -n "${!v:-}" ]] || die "$v is not set"; d
 saved() { [[ -s "$state/$1" ]] || die "no '$1' from an earlier phase (run the phases in order)"; cat "$state/$1"; }
 output() { [[ -z "${GITHUB_OUTPUT:-}" ]] || echo "$1=$2" >> "$GITHUB_OUTPUT"; }
 
-# Files whose change makes the PR risk:high (ADR 0020): CI and workflows, the guardrails and the App, the rules
-# agents follow, and the ADRs that set those rules.
-protected_re='^(\.github/|\.claude/|CLAUDE\.md$|ci/protect-repo\.sh$|ci/factory-app/|ci/create-factory-app\.sh$|docs/factory-adr/00(17|20|21|22)-)'
+# Files whose change makes the PR risk:high (ADR 0020): CI and workflows (the factory's and the templates'), the
+# guardrails and the App, the rules agents follow, and the ADRs that set those rules.
+protected_re='(^|/)\.github/|^(\.claude/|CLAUDE\.md$|ci/protect-repo\.sh$|ci/factory-app/|ci/create-factory-app\.sh$|docs/factory-adr/00(17|2[0-4])-)'
 
 phase="${1:-}"
 [[ -n "$phase" ]] || { echo "usage: factory-step.sh resolve|tools|agent|pack|gate|publish|failed" >&2; exit 2; }

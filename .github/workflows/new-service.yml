@@ -1,0 +1,111 @@
+name: New service
+
+# Provisions a service repo in one run (factory ADR 0024): scaffold from the latest java-pipeline release, create
+# the public repo, set its secrets and labels, add the factory's App, apply the guardrails.
+# Needs: the `provisioning` environment (deployment branches: main only) holding the secret FACTORY_ADMIN_TOKEN,
+# a fine-grained token of the owner's (all repositories: Administration, Contents, Secrets, Dependabot secrets,
+# Issues, Workflows read and write; account: GitHub App installation repository access); the repository secrets
+# FACTORY_PACKAGES_TOKEN and CLAUDE_CODE_OAUTH_TOKEN, copied into the new repo; the App's FACTORY_APP_* settings.
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "Service name, kebab-case (e.g. customer-service)"
+        required: true
+      package:
+        description: "Base Java package (e.g. com.example.customers)"
+        required: true
+      template:
+        description: "Template"
+        required: true
+        default: skeleton
+        type: choice
+        options: [skeleton, payments-example]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: new-service
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Only main can use this environment, so only code the owner merged ever holds the admin token.
+    environment: provisioning
+    env:
+      OWNER: ${{ github.repository_owner }}
+      NAME: ${{ inputs.name }}
+      PACKAGE: ${{ inputs.package }}
+      TEMPLATE: ${{ inputs.template }}
+    steps:
+      - name: Refuse anything but main
+        env:
+          REF: ${{ github.ref }}
+        run: '[[ "$REF" == refs/heads/main ]] || { echo "::error::run from main only"; exit 1; }'
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the inputs
+        run: .github/scripts/new-service.sh check
+        env:
+          GH_TOKEN: ${{ secrets.FACTORY_ADMIN_TOKEN }}
+
+      # New projects get the latest released plugin and pin it (ADR 0015), never an untagged main.
+      - name: Check out the latest java-pipeline release
+        id: release
+        run: |
+          tag=$(git tag -l 'java-pipeline-v*' --sort=-v:refname | head -n 1)
+          [[ -n "$tag" ]] || { echo "::error::no java-pipeline release tag"; exit 1; }
+          git worktree add --detach "$RUNNER_TEMP/release" "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Release: $tag" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username-env-var: GITHUB_ACTOR
+          server-password-env-var: FACTORY_PACKAGES_TOKEN
+
+      - name: Mint an App token (the installation to add the repo to, the bot as author)
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.FACTORY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FACTORY_APP_KEY }}
+
+      - name: Commit as the factory's bot
+        run: |
+          .github/scripts/bot-identity.sh
+          git config --global user.name "$(git config user.name)"
+          git config --global user.email "$(git config user.email)"
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+
+      - name: Scaffold (new-project.sh from the release; ./mvnw verify green)
+        run: .github/scripts/new-service.sh scaffold
+        env:
+          RELEASE_DIR: ${{ runner.temp }}/release
+          FACTORY_PACKAGES_TOKEN: ${{ secrets.FACTORY_PACKAGES_TOKEN }}
+
+      - name: Create the public repo and push main
+        run: .github/scripts/new-service.sh create
+        env:
+          GH_TOKEN: ${{ secrets.FACTORY_ADMIN_TOKEN }}
+
+      - name: Secrets, labels, the factory's App, guardrails
+        run: .github/scripts/new-service.sh configure
+        env:
+          GH_TOKEN: ${{ secrets.FACTORY_ADMIN_TOKEN }}
+          PACKAGES_TOKEN: ${{ secrets.FACTORY_PACKAGES_TOKEN }}
+          CLAUDE_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          APP_INSTALLATION_ID: ${{ steps.app.outputs.installation-id }}
