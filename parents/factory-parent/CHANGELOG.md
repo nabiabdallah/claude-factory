@@ -4,6 +4,12 @@ All notable changes to the shared Maven build, newest first ([Keep a Changelog](
 [semver](https://semver.org/)). Each version is tagged `factory-parent-vX.Y.Z`; the tag publishes it to GitHub
 Packages. Services get it through a Dependabot PR. Decisions are in `docs/factory-adr/`.
 
+## [2.1.1] - 2026-11-13
+
+- Base image digest updated (PR #11): the distroless image with zlib1g `+deb13u1`, which fixes CVE-2026-76844 and
+  CVE-2026-85091 (HIGH). 2.1.0's digest fails the services' image scan. The change sat on `main` under 2.1.0 without
+  a release, so factory CI (which builds against the repo's parent) passed while new services failed.
+
 ## [2.1.0] - 2026-11-05
 
 - Maven Enforcer at `validate`: Java 21+, Maven 3.9+, pinned plugins, no SNAPSHOT dependencies or parent, no
