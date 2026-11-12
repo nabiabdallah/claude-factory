@@ -1,0 +1,87 @@
+name: Factory identity check
+
+# Proves the factory's GitHub App works end to end (factory ADR 0021): mint a token, push a branch as the App's
+# bot, open a draft PR, and see CI start on it by itself (a PR opened with GITHUB_TOKEN would not). The probe PR
+# and branch are removed afterwards, and the CI run it started is cancelled. Run it after creating the App and
+# after rotating its key.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write # cancel the probe's CI run
+
+concurrency:
+  group: factory-identity
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Require the App's configuration
+        env:
+          CLIENT_ID: ${{ vars.FACTORY_APP_CLIENT_ID }}
+          HAS_KEY: ${{ secrets.FACTORY_APP_KEY != '' }}
+        run: |
+          [[ -n "$CLIENT_ID" && "$HAS_KEY" == true ]] || {
+            echo "::error::FACTORY_APP_CLIENT_ID or FACTORY_APP_KEY missing: run ci/create-factory-app.sh first"; exit 1; }
+
+      - name: Mint an App token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.FACTORY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FACTORY_APP_KEY }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Push a probe branch and open a draft PR as the bot
+        id: probe
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          .github/scripts/bot-identity.sh
+          branch="factory/identity-check-$RUN_ID"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          git switch -c "$branch"
+          git commit --allow-empty -m "test: factory identity check (run $RUN_ID)"
+          git push origin "$branch"
+          url=$(gh pr create --draft --base main --head "$branch" --title "test: factory identity check" \
+            --body "Opened by the Factory identity check workflow (ADR 0021). Closed automatically.")
+          echo "pr=$url" >> "$GITHUB_OUTPUT"
+          author=$(gh pr view "$url" --json author -q .author.login)
+          echo "PR $url opened by $author"
+          [[ "$author" == "app/$APP_SLUG" || "$author" == "$APP_SLUG" ]] || {
+            echo "::error::PR author is $author, not the App"; exit 1; }
+
+      - name: CI starts on the bot's PR by itself
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.probe.outputs.branch }}
+        run: |
+          for _ in $(seq 1 30); do
+            run=$(gh run list --branch "$BRANCH" --event pull_request --workflow CI --limit 1 --json databaseId -q '.[0].databaseId // empty')
+            if [[ -n "$run" ]]; then
+              echo "CI run $run started on the bot's PR"
+              gh run cancel "$run" >/dev/null || true
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::no CI run started on the bot's PR within 5 minutes"; exit 1
+
+      - name: Remove the probe PR and branch
+        if: always() && steps.probe.outputs.branch != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ steps.probe.outputs.pr }}
+          BRANCH: ${{ steps.probe.outputs.branch }}
+        run: |
+          [[ -z "$PR" ]] || gh pr close "$PR" >/dev/null || true
+          git push origin --delete "$BRANCH" || true
