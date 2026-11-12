@@ -115,6 +115,9 @@ check "factory: release tags can't be updated or deleted, by anyone" \
 check "factory: Actions may open PRs (base-image.yml)" \
   'any(.[]; .path == "repos/acme/demo/actions/permissions/workflow" and .body.can_approve_pull_request_reviews == true)' \
   "$work/factory.jsonl"
+check "service: Actions may open PRs (the unattended runner)" \
+  'any(.[]; .path == "repos/acme/demo/actions/permissions/workflow" and .body.can_approve_pull_request_reviews == true and .body.default_workflow_permissions == "read")' \
+  "$work/service.jsonl"
 check "service: no tag ruleset" '[.[] | select(.name == "release tags")] | length == 0' "$work/service.jsonl"
 
 # --- apply, against the fake gh
