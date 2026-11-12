@@ -28,8 +28,8 @@ nobody can answer a question or approve anything. The stages below still apply, 
 - The runner runs `./mvnw verify` itself after you finish; a red build fails the run whatever you reported.
 
 ## 1. Spec
-- Find the spec in `docs/specs/`. If none exists, draft one from `docs/specs/_template.md`
-  with the user, and STOP for their approval before planning.
+- Find the spec in `docs/specs/`. If none exists, draft one with the `java-pipeline:intake` skill (it fills
+  `docs/specs/_template.md` and lists open questions), and STOP for the user's approval before planning.
 - The spec must have numbered acceptance criteria. If it doesn't, ask.
 
 ## 2. Plan

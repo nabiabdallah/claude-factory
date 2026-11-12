@@ -16,7 +16,7 @@ claude-factory/
 │   ├── .claude-plugin/plugin.json       plugin manifest (version lives here)
 │   ├── CHANGELOG.md                     one section per release (tag java-pipeline-vX.Y.Z)
 │   ├── agents/                          architect-reviewer, test-writer, code-reviewer
-│   ├── skills/                          new-feature, write-adr, new-project, add-postgres, add-resource-server
+│   ├── skills/                          intake, new-feature, write-adr, new-project, add-postgres, add-resource-server
 │   ├── hooks/                           hooks.json, format-java.sh, verify-gate.sh
 │   ├── bin/mvnw-sandboxed               ./mvnw + sandbox proxy (on PATH while enabled)
 │   └── templates/                       what /java-pipeline:new-project copies
@@ -57,11 +57,13 @@ own `.claude/settings.json`, so opening the project prompts to install it if it'
 cd ~/dev/projects/customer-service && claude
 /java-pipeline:add-postgres                     # optional: Postgres, Flyway, embedded-Postgres tests
 /java-pipeline:add-resource-server              # optional: OAuth2/JWT auth (AUTH_ISSUER_URI), test tokens
+/java-pipeline:intake Customers can look up their own profile by id       # idea → spec with open questions
 /java-pipeline:new-feature Add GET /customers/{id}. Write the spec first.
 ```
 
-Unattended, from a service repo on GitHub (ADR 0018): put the label `factory:build` on an issue that names an
-approved spec; the same pipeline runs in GitHub Actions and ends in a pull request
+Unattended, from a service repo on GitHub (ADRs 0018, 0019): the label `factory:spec` on an issue turns its idea
+into a spec pull request; the label `factory:build` on an issue with an approved spec runs the pipeline in GitHub
+Actions and ends in a pull request
 ([ONBOARDING.md](docs/ONBOARDING.md), step 7).
 
 Agents are available as `java-pipeline:architect-reviewer`, `java-pipeline:test-writer` and

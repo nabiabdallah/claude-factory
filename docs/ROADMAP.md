@@ -27,7 +27,7 @@ the step in the PR that finishes it. The steps come from the architecture audit 
 |---|---|---|---|
 | A1 ✅ | Autonomous-mode rules | Every action needed the owner's yes | Done: ADR 0017, PR #13 |
 | A2 (built, awaiting the owner's acceptance run) | Headless runner | The pipeline only runs in an interactive session on the owner's machine: no trigger, no queue | A labelled issue in a service repo starts `new-feature` in GitHub Actions and ends in a PR; a red build fails the run (today the Stop hook gives up after 3 attempts and lets the session end). Built in ADR 0018, java-pipeline 0.17.0: `factory-feature.yml` + `factory-run.sh` in the templates, tested with a stand-in agent. Done once a real labelled issue on a fresh service ends in a PR (see "Waiting on the owner") |
-| A3 | Intake skill | Nothing turns an idea into a spec; the pipeline starts from a spec the owner co-writes | `/java-pipeline:intake <idea>` drafts a spec from `_template.md` with open questions listed, as a PR or issue the owner approves |
+| A3 (built, awaiting the owner's acceptance run) | Intake skill | Nothing turns an idea into a spec; the pipeline starts from a spec the owner co-writes | Built in ADR 0019, java-pipeline 0.18.0: `/java-pipeline:intake <idea>`, and the label `factory:spec` that runs it unattended and opens a spec PR. Done once a real labelled idea ends in a spec PR (same acceptance run as A2) |
 | A4 | Orchestrator and implementer split | The main session both conducts the stages and writes the code; a feature can't be resumed or split | An implementer agent; `new-feature` only orchestrates; per-feature state file so a new session resumes at the right stage |
 | A5 | Domain rules out of the agents | Agents are hard-wired to banking (money, idempotency on transfers), which misfires on other software | Agents read a per-project profile; the banking checks become the `payments-example` profile; the skeleton gets a neutral one |
 | A6 | Pipeline evals and metrics | CI tests scripts and templates, never agent behaviour; cost and cycle time aren't tracked | A benchmark spec runs through the pipeline on plugin changes and its result is recorded; each PR reports stages, attempts and reviewer findings |
@@ -40,7 +40,7 @@ and the alert-to-issue loop wait for a real cluster.
 Where the work runs: a cloud session can't download Maven dependencies, so factory CI on the PR is the judge
 there. Use the owner's machine for steps that change the templates or factory-parent.
 
-## Status (2026-11-10)
+## Status (2026-11-11)
 
 ### Done
 | Step | Result | Record |
@@ -54,9 +54,11 @@ there. Use the owner's machine for steps that change the templates or factory-pa
 | #7 Factory as a product | Release tags `java-pipeline-vX.Y.Z` with GitHub Releases; new projects pinned to their plugin release (`ref`, `sparsePaths`); changelogs for the plugin and factory-parent, checked on every PR and release; `docs/ONBOARDING.md`; docs link check; java-pipeline 0.16.0 | ADR 0015, PR #8, tag `java-pipeline-v0.16.0` |
 
 ### Waiting on the owner
-- A2 acceptance run, after its PR merges and `java-pipeline-v0.17.0` is tagged: create a fresh service
+- Tag `java-pipeline-v0.18.0` (0.17.0 was never tagged; the session can't push tags).
+- A2 and A3 acceptance run, once `java-pipeline-v0.18.0` is tagged: create a fresh service
   (ONBOARDING steps 4–5), do the once-per-repo setup in step 7 (`CLAUDE_CODE_OAUTH_TOKEN`, the `factory:build`
-  label), merge an approved spec, label an issue that names it. Expected: a PR and a comment on the issue. The
+  and `factory:spec` labels), open an issue with an idea and label it `factory:spec`, merge the spec PR, then
+  label the issue `factory:build`. Expected each time: a PR and a comment on the issue. The
   run clones the plugin without a token, so do this after claude-factory is public (#1).
 - Review payments-service PR #10 (spec 0005).
 - After 2.0.0 is published, Dependabot will open a parent-upgrade PR in payments-service that fails without
@@ -79,7 +81,7 @@ Each new pipeline plugin gets its own plan for the owner's OK:
 - A **frontend** pipeline, to complete the software.
 - A **Python backend pipeline** for quant research.
 
-Also planned: a standard intake step (idea → spec → owner approval).
+The intake step (idea → spec → owner approval) is queue step A3 above.
 
 ### Waiting for a real cluster
 Follow-ups from ADRs 0009, 0012 and 0014 that need a cluster to build or test:
