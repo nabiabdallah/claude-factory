@@ -42,7 +42,7 @@ case "$*" in
   "api --method POST user/repos "*) [[ -f "$FAKE_GH/create-fails" ]] && exit 1; echo acme/x ;;
   "secret set "*) printf 'STDIN[%s]\n' "$(cat)" >> "$log" ;;
   "label create "*) ;;
-  "api --method PUT user/installations/"*) ;;
+  "api --method PUT user/installations/"*) [[ -f "$FAKE_GH/app-refuses" ]] && { echo "gh: Resource not accessible by personal access token (HTTP 403)" >&2; exit 1; }; true ;;
   # protect-repo.sh: reads visibility and rulesets, then writes
   "api repos/acme/demo") echo '{"visibility":"public"}' ;;
   "api repos/acme/demo/rulesets?includes_parents=false") echo '[]' ;;
@@ -104,6 +104,9 @@ c="$FAKE_GH/calls"
 for l in factory:spec factory:build risk:high; do grep -q "^label create $l --repo acme/demo " "$c" && ok "label $l" || bad "no label $l"; done
 grep -qx 'api --method PUT user/installations/55/repositories/777' "$c" && ok "the App gets the repo" || bad "no App install call"
 grep -q 'repos/acme/demo/rulesets' "$c" && ok "protect-repo.sh ran" || bad "protect-repo.sh did not run"
+fresh; touch "$FAKE_GH/app-refuses"; expect_ok "configure finishes when the App can't be added" cfg
+grep -q 'repos/acme/demo/rulesets' "$FAKE_GH/calls" && ok "guardrails applied even though the App was refused" || bad "no guardrails when the App was refused"
+grep -q '::warning::could not add acme/demo' "$work/out" && grep -qF 'settings/installations/55' "$work/out" && ok "a refused App is a warning with the fix" || bad "no warning for the refused App"
 fresh; PACKAGES_TOKEN=x CLAUDE_TOKEN=y APP_INSTALLATION_ID='5;x' expect_fail "configure refuses a malformed installation id" "not a number" run configure
 fresh; PACKAGES_TOKEN= CLAUDE_TOKEN=y APP_INSTALLATION_ID=5 expect_fail "configure needs the packages token" "PACKAGES_TOKEN is not set" run configure
 

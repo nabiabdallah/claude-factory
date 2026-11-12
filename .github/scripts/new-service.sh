@@ -84,12 +84,18 @@ factory:spec|1D76DB|Draft a spec from this issue's idea
 factory:build|0E8A16|Build this issue's approved spec
 risk:high|B60205|Only the owner merges (ADR 0020)
 LABELS
+    "$here/../../ci/protect-repo.sh" "$repo" service || die "protect-repo.sh failed on $repo"
+    # Adding a repo to the App's installation may need a classic token (GitHub's docs disagree). Services don't use
+    # the App yet (their runner still uses GITHUB_TOKEN), so a refusal is a warning with the one click that fixes it.
     repo_id="$(gh api "repos/$repo" --jq .id)"
     [[ "$repo_id" =~ ^[0-9]+$ ]] || die "could not read the id of $repo"
-    gh api --method PUT "user/installations/$APP_INSTALLATION_ID/repositories/$repo_id" >/dev/null \
-      || die "could not add $repo to the factory's App"
-    "$here/../../ci/protect-repo.sh" "$repo" service || die "protect-repo.sh failed on $repo"
-    summary "Configured $repo: secrets, labels, the factory's App, guardrails"
+    if gh api --method PUT "user/installations/$APP_INSTALLATION_ID/repositories/$repo_id" >/dev/null 2>"$state/app.err"; then
+      app="the factory's App"
+    else
+      echo "::warning::could not add $repo to the factory's App ($(tr -d '\n' < "$state/app.err")). Add it by hand: https://github.com/settings/installations/$APP_INSTALLATION_ID"
+      app="NOT the App (add it by hand: https://github.com/settings/installations/$APP_INSTALLATION_ID)"
+    fi
+    summary "Configured $repo: secrets, labels, guardrails, $app"
     ;;
 
   *) echo "usage: new-service.sh check|scaffold|create|configure" >&2; exit 2 ;;

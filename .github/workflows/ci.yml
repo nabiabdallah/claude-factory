@@ -66,6 +66,10 @@ jobs:
       - name: Factory step runner (stand-in agent, fake gh)
         run: ci/test-factory-step.sh
 
+      # Every workflow loads on GitHub (factory ADR 0025): actionlint, pinned; it must also reject a known-bad file.
+      - name: Workflow lint (actionlint)
+        run: ci/lint-workflows.sh
+
       # Service provisioning (factory ADR 0024): input checks, scaffold, create, secrets on stdin only, labels,
       # the App, guardrails; fake gh, stand-in new-project.sh, local remote.
       - name: Service provisioning (fake gh, stand-in scaffold)
