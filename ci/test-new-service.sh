@@ -33,7 +33,11 @@ cat > "$work/bin/gh" <<'SH'
 #!/usr/bin/env bash
 log="$FAKE_GH/calls"; printf '%s\n' "$*" >> "$log"
 case "$*" in
-  "api repos/acme/"*" --jq .full_name") [[ -f "$FAKE_GH/exists" ]] && echo acme/x || exit 1 ;;
+  "api user --jq .login") [[ -f "$FAKE_GH/bad-token" ]] && { echo "gh: Bad credentials (HTTP 401)" >&2; exit 1; }
+                          cat "$FAKE_GH/login" 2>/dev/null || echo acme ;;
+  "api repos/acme/"*" --jq .full_name") if [[ -f "$FAKE_GH/exists" ]]; then echo acme/x
+    elif [[ -f "$FAKE_GH/api-down" ]]; then echo "gh: Server Error (HTTP 500)" >&2; exit 1
+    else echo "gh: Not Found (HTTP 404)" >&2; exit 1; fi ;;
   "api repos/acme/"*" --jq .id") echo 777 ;;
   "api --method POST user/repos "*) [[ -f "$FAKE_GH/create-fails" ]] && exit 1; echo acme/x ;;
   "secret set "*) printf 'STDIN[%s]\n' "$(cat)" >> "$log" ;;
@@ -70,6 +74,9 @@ fresh; PACKAGE=example expect_fail "check refuses a one-part package" "package m
 fresh; PACKAGE='com.Example.x' expect_fail "check refuses an uppercase package" "package must" run check
 fresh; TEMPLATE=other expect_fail "check refuses an unknown template" "template must" run check
 fresh; touch "$FAKE_GH/exists"; expect_fail "check refuses an existing repo" "already exists" run check
+fresh; touch "$FAKE_GH/bad-token"; expect_fail "check stops on a token GitHub rejects" "admin token doesn't work" run check
+fresh; echo someone-else > "$FAKE_GH/login"; expect_fail "check stops on another account's token" "belongs to 'someone-else'" run check
+fresh; touch "$FAKE_GH/api-down"; expect_fail "check stops when existence can't be checked" "could not check whether" run check
 
 # --- scaffold
 fresh; expect_ok "scaffold makes a committed, pinned project" run scaffold

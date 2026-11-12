@@ -29,9 +29,14 @@ case "$phase" in
     [[ ! "$NAME" =~ $reserved ]] || die "$NAME is reserved: provisioning never touches it"
     [[ "$PACKAGE" =~ ^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$ ]] || die "package must look like com.example.customers"
     [[ "$TEMPLATE" =~ ^(skeleton|payments-example)$ ]] || die "template must be skeleton or payments-example"
-    if gh api "repos/$OWNER/$NAME" --jq .full_name >/dev/null 2>&1; then
+    # The admin token must work and be the owner's: a bad token must not read as "the repo doesn't exist".
+    login="$(gh api user --jq .login 2>/dev/null)" \
+      || die "the admin token doesn't work (FACTORY_ADMIN_TOKEN in the provisioning environment: expired, revoked or mistyped?)"
+    [[ "$login" == "$OWNER" ]] || die "the admin token belongs to '$login', not $OWNER"
+    if found="$(gh api "repos/$OWNER/$NAME" --jq .full_name 2>&1)"; then
       die "$OWNER/$NAME already exists: provisioning only creates new repos"
     fi
+    grep -q 'HTTP 404' <<<"$found" || die "could not check whether $OWNER/$NAME exists: $found"
     echo "new-service: $OWNER/$NAME ($TEMPLATE, package $PACKAGE)"
     ;;
 
