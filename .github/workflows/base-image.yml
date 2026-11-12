@@ -18,7 +18,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # The factory's App (ADR 0021), when configured: its PRs start CI by themselves. Without it, GITHUB_TOKEN.
+      - name: Mint an App token
+        id: app
+        if: vars.FACTORY_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.FACTORY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FACTORY_APP_KEY }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ steps.app.outputs.token || github.token }}
 
       - name: Compare the pinned digest with the registry
         id: digest
@@ -42,18 +53,20 @@ jobs:
       - name: Open a PR
         if: steps.digest.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
           LATEST: ${{ steps.digest.outputs.latest }}
         run: |
           branch="deps/base-image-${LATEST:7:12}"
           if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
             echo "PR branch $branch already exists"; exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          .github/scripts/bot-identity.sh
           git switch -c "$branch"
           git commit -am "build(factory-parent): base image digest ${LATEST:0:19}"
           git push origin "$branch"
+          note=""
+          [[ -n "$APP_SLUG" ]] || note=" PRs opened with GITHUB_TOKEN don't start CI: close and reopen this PR to run the build and image scan."
           gh pr create --base main --head "$branch" \
             --title "build(factory-parent): new distroless base image digest" \
-            --body "Distroless published a new digest for the pinned tag (usually security fixes). PRs opened by Actions with GITHUB_TOKEN don't start CI: close and reopen this PR to run the build and image scan. To release after merging: bump the factory-parent version and tag factory-parent-v<version>."
+            --body "Distroless published a new digest for the pinned tag (usually security fixes).$note To release after merging: bump the factory-parent version and tag factory-parent-v<version>."

@@ -56,6 +56,11 @@ jobs:
       - name: Repo guardrails script (dry run and a fake gh)
         run: ci/test-protect-repo.sh
 
+      # The factory's GitHub App (factory ADR 0021): manifest permissions, the create script (key never printed),
+      # the bot's git identity, and the key reaching only the token action; no GitHub calls.
+      - name: Factory App scripts (fake gh)
+        run: ci/test-factory-app.sh
+
       - name: Supply-chain checks (SHA-pinned actions, base digest, pinned tools, SBOM)
         run: ci/check-supply-chain.sh plugins/java-pipeline/templates/skeleton
 

@@ -1,0 +1,19 @@
+{
+  "name": "nabiabdallah-factory-bot",
+  "url": "https://github.com/nabiabdallah/claude-factory",
+  "description": "claude-factory's own identity (factory ADRs 0020, 0021): opens PRs and comments for factory workflows.",
+  "public": false,
+  "redirect_url": "https://github.com/nabiabdallah/claude-factory/blob/main/docs/factory-adr/0021-factory-github-app.md",
+  "hook_attributes": {
+    "url": "https://github.com/nabiabdallah/claude-factory",
+    "active": false
+  },
+  "default_permissions": {
+    "metadata": "read",
+    "contents": "write",
+    "pull_requests": "write",
+    "issues": "write",
+    "workflows": "write"
+  },
+  "default_events": []
+}
