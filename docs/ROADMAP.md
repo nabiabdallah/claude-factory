@@ -14,33 +14,45 @@ validate the factory: don't port factory changes to it or build features on it u
   the plan when the PR merges: the ADR and the PR description keep the reasoning. Steps in the autonomous queue
   below skip the wait: their plan is the PR description and the owner's merge is the approval.
 - Send broad investigations to subagents so the main session stays small.
-- Merge, tag, push to `main`, create a repo, or change GitHub settings only after the owner says yes. Pushing a
-  branch and opening a PR for a queued step needs no further yes (ADR 0017).
+- In a session: merge, tag, push to `main`, create a repo, or change GitHub settings only after the owner says
+  yes. Pushing a branch and opening a PR for a queued step needs no further yes (ADR 0017). Once B0's rulesets
+  are in place, factory workflows may do more, within the limits of ADR 0020 (see `CLAUDE.md`).
 
-## Autonomous queue (ADR 0017)
+## Autonomous queue (ADRs 0017, 0020)
 The owner starts a session with "Read docs/ROADMAP.md and continue" (or just "go"). Take the first step below
 that isn't done, bring it to a PR with green factory CI, and stop. One step per session, one PR per step. Tick
 the step in the PR that finishes it. The steps come from the architecture audit of 2026-11-10 (java-pipeline
 0.16.0): the factory is one strong production line, and these are what it lacks to work as a department.
+B0–B7 come from the audit of 2026-11-12 (ADR 0020): they remove the reasons the owner has to step in (no
+identity of its own, the laptop sandbox, a person at every gate). They come before A4. Once B4 is done, merging a
+step's PR starts the next step, and "go" is no longer needed.
 
 | # | Step | Gap it closes | Done when |
 |---|---|---|---|
 | A1 ✅ | Autonomous-mode rules | Every action needed the owner's yes | Done: ADR 0017, PR #13 |
 | A2 (built, awaiting the owner's acceptance run) | Headless runner | The pipeline only runs in an interactive session on the owner's machine: no trigger, no queue | A labelled issue in a service repo starts `new-feature` in GitHub Actions and ends in a PR; a red build fails the run (today the Stop hook gives up after 3 attempts and lets the session end). Built in ADR 0018, java-pipeline 0.17.0: `factory-feature.yml` + `factory-run.sh` in the templates, tested with a stand-in agent. Done once a real labelled issue on a fresh service ends in a PR (see "Waiting on the owner") |
 | A3 (built, awaiting the owner's acceptance run) | Intake skill | Nothing turns an idea into a spec; the pipeline starts from a spec the owner co-writes | Built in ADR 0019, java-pipeline 0.18.0: `/java-pipeline:intake <idea>`, and the label `factory:spec` that runs it unattended and opens a spec PR. Done once a real labelled idea ends in a spec PR (same acceptance run as A2) |
+| B0 | Guardrails applied, ADR 0020 | The never-list is a rule the agent follows, not one GitHub enforces (0 rulesets on claude-factory) | This PR: ADR 0020, the `CLAUDE.md` rules, this queue. Then the owner runs `ci/protect-repo.sh nabiabdallah/claude-factory factory`, plus rulesets on the `java-pipeline-v*` and `factory-parent-v*` tags (only the release workflow may create them). Done when `gh api repos/nabiabdallah/claude-factory/rulesets` lists them, a PR with a red check can't merge, and a hand-pushed tag is rejected |
+| B1 | Factory identity | The factory acts as the owner (his `gh` login, email, subscription), so every privileged action needs his yes; PRs opened with `GITHUB_TOKEN` don't start CI | A GitHub App the owner creates once from a manifest the step generates (contents, pull requests, issues, checks, actions, administration; nothing org-wide); its key is the `FACTORY_APP_KEY` secret in claude-factory; workflows mint short-lived tokens with `actions/create-github-app-token` (pinned by SHA) and commit as the App. Done when a workflow opens a bot PR and CI starts on it without a close/reopen. Replaces `FACTORY_PR_TOKEN` |
+| B2 | Factory steps run in Actions | Factory work runs on the owner's laptop, in a sandbox that blocks `gh`, Maven Central, Docker and release assets | `factory-step.yml` in claude-factory runs a queued step headless, on the ADR 0018 model (the agent has no GitHub token; a gate and a publish step follow). Touching a protected file (workflows, `protect-repo.sh`, the tier classifier, the `CLAUDE.md` rules, ADRs 0017/0020) makes the PR `risk:high`; it doesn't fail the run. Done when a queued step started by `workflow_dispatch` ends in a bot PR with green CI |
+| B3 | Service provisioning | Every service needs a repo, secrets, labels and protection set up by hand | `new-service.yml` (inputs: name, package, template) scaffolds with the current release, creates the public repo, sets `FACTORY_PACKAGES_TOKEN` for Actions and Dependabot and `CLAUDE_CODE_OAUTH_TOKEN` from claude-factory's own secrets, creates the labels, runs `protect-repo.sh` and installs the App. Check first whether an App can create repos on a personal account; if not, use a fine-grained token with Administration write, used only here (ADR 0020). Done when it provisions `demo-service`, and the A2/A3 acceptance run passes there: the issue "GET /hello?name=X returns a greeting" with `factory:spec` ends in a spec PR, and after the merge, in a feature PR |
+| B4 | Chaining and releases | Every hop waits for a person: "go", relabelling after a spec merges, tagging | When a spec PR with `- Status: Approved` merges, the bot adds `factory:build` to its issue. When a `plugin.json` or factory-parent version bump merges, the tag and release follow. When a step's PR merges (and once a day), the next queued step is dispatched if no step PR is open. `FACTORY_PAUSED=true` stops all dispatch. Done when merging a spec PR alone leads to a feature PR, and merging a step's PR alone starts the next step |
+| B5 | Risk tiers and auto-merge | The owner merges every PR, including mechanical ones | `risk-tier.yml` labels each PR `risk:low`/`risk:high` from its changed paths (the lists in ADR 0020; any path it doesn't know counts as high). A `risk:low` PR auto-merges once required checks pass and an independent `code-reviewer` run on the final diff says APPROVE. Done when tests cover each path class, and on a real PR a low one merges by itself and a high one waits |
+| B6 | Usage brake and ledger | Nothing records what runs cost or stops dispatch when the subscription runs out | Each run's usage, result and duration are appended to a ledger on the `factory-ledger` branch. A run that hits the subscription's usage limit ends as `usage-limit` (not a failure of the step); dispatch pauses until the reset and the inbox says so. The per-run `FACTORY_MAX_BUDGET_USD` stays as a runaway guard. Done when a simulated limit pauses dispatch and the ledger shows each run |
+| B7 | Maintenance agent and decision inbox | Dependabot PRs, plugin drift and expiring exceptions wait until the owner notices; questions arrive one at a time | A weekly job: triage Dependabot (merge if low; otherwise propose the fix or closing), template-drift and plugin-upgrade PRs to services, flags expiring `.trivyignore` entries and the yearly `CLAUDE_CODE_OAUTH_TOKEN`. One pinned "Factory inbox" issue gets every stop-and-report (decision needed and a recommendation) and a weekly digest (runs, usage, auto-merges, waiting). Done when the digest posts and a stopped run shows up in the inbox |
 | A4 | Orchestrator and implementer split | The main session both conducts the stages and writes the code; a feature can't be resumed or split | An implementer agent; `new-feature` only orchestrates; per-feature state file so a new session resumes at the right stage |
 | A5 | Domain rules out of the agents | Agents are hard-wired to banking (money, idempotency on transfers), which misfires on other software | Agents read a per-project profile; the banking checks become the `payments-example` profile; the skeleton gets a neutral one |
 | A6 | Pipeline evals and metrics | CI tests scripts and templates, never agent behaviour; cost and cycle time aren't tracked | A benchmark spec runs through the pipeline on plugin changes and its result is recorded; each PR reports stages, attempts and reviewer findings |
 
-Not queued yet (each needs its own plan and the owner's OK): more roles (security reviewer, end-to-end tester,
-maintenance agent for Dependabot triage and template drift), a learning loop from reviewer findings back into
+Not queued yet (each needs its own plan and the owner's OK): more roles (security reviewer, end-to-end tester),
+a learning loop from reviewer findings back into
 the agents, and the frontend and Python pipelines already listed under "After #1". GitOps, post-deploy checks
 and the alert-to-issue loop wait for a real cluster.
 
 Where the work runs: a cloud session can't download Maven dependencies, so factory CI on the PR is the judge
 there. Use the owner's machine for steps that change the templates or factory-parent.
 
-## Status (2026-11-11)
+## Status (2026-11-12)
 
 ### Done
 | Step | Result | Record |
@@ -54,12 +66,13 @@ there. Use the owner's machine for steps that change the templates or factory-pa
 | #7 Factory as a product | Release tags `java-pipeline-vX.Y.Z` with GitHub Releases; new projects pinned to their plugin release (`ref`, `sparsePaths`); changelogs for the plugin and factory-parent, checked on every PR and release; `docs/ONBOARDING.md`; docs link check; java-pipeline 0.16.0 | ADR 0015, PR #8, tag `java-pipeline-v0.16.0` |
 
 ### Waiting on the owner
-- Tag `java-pipeline-v0.18.0` (0.17.0 was never tagged; the session can't push tags).
-- A2 and A3 acceptance run, once `java-pipeline-v0.18.0` is tagged: create a fresh service
-  (ONBOARDING steps 4–5), do the once-per-repo setup in step 7 (`CLAUDE_CODE_OAUTH_TOKEN`, the `factory:build`
-  and `factory:spec` labels), open an issue with an idea and label it `factory:spec`, merge the spec PR, then
-  label the issue `factory:build`. Expected each time: a PR and a comment on the issue. The
-  run clones the plugin without a token, so do this after claude-factory is public (#1).
+- B0: merge its PR, then run `ci/protect-repo.sh nabiabdallah/claude-factory factory` and add the tag
+  rulesets (see the queue).
+- The A2 and A3 acceptance run is now part of B3 (`java-pipeline-v0.18.0` is tagged and released). A local
+  scaffold waits at `~/dev/projects/demo-service` (0.18.0, never pushed); B3 provisions the repo instead.
+  `~/dev/projects/demo-service.stale-0.9.1` came from the outdated plugin cache and can be deleted. Update the
+  local plugin (`/plugin`), which is still at 0.9.1.
+- Set `CLAUDE_CODE_OAUTH_TOKEN` in claude-factory (`claude setup-token`) before B3; B3 copies it to services.
 - Review payments-service PR #10 (spec 0005).
 - After 2.0.0 is published, Dependabot will open a parent-upgrade PR in payments-service that fails without
   the ADR 0010 code changes. Recommendation: close it, unless the owner wants payments-service upgraded.
