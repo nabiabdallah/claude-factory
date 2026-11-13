@@ -71,6 +71,11 @@ jobs:
       - name: Factory chain and release tags (fake gh)
         run: ci/test-factory-chain.sh
 
+      # Risk tiers and auto-merge (factory ADR 0027): every path class, Dependabot's rule, what the merge job
+      # re-checks (sha, tier, required checks, verdict); fake gh, stand-in reviewer.
+      - name: Risk tiers and auto-merge (fake gh, stand-in reviewer)
+        run: ci/test-risk-tier.sh
+
       # Every workflow loads on GitHub (factory ADR 0025): actionlint, pinned; it must also reject a known-bad file.
       - name: Workflow lint (actionlint)
         run: ci/lint-workflows.sh
