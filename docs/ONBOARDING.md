@@ -118,12 +118,13 @@ gh label create factory:build --repo nabiabdallah/customer-service --description
 gh label create factory:spec --repo nabiabdallah/customer-service --description "Draft a spec from this issue's idea"
 ```
 
-Optional: the secret `FACTORY_PR_TOKEN` (a fine-grained token for this repo, Contents and Pull requests read and
-write) so CI starts on the PR by itself, and the variable `FACTORY_MAX_BUDGET_USD` (default 25 per run).
+Optional: the variables `FACTORY_MAX_BUDGET_USD` (default 25 per run) and `FACTORY_PAUSED` (`true` stops approved
+specs from starting their build).
 
 Then, per feature, from an idea ([ADR 0019](factory-adr/0019-intake-idea-to-spec.md)): open an issue that
 describes it and add the label `factory:spec`. The run opens a spec PR: answer any open questions in the file, make
-sure it says `- Status: Approved`, and merge. Then add `factory:build` to the same issue.
+sure it says `- Status: Approved`, and merge. The merge puts `factory:build` on the issue and starts the build
+([ADR 0026](factory-adr/0026-chaining-and-releases.md)).
 
 Or with a spec you wrote (in a session: `/java-pipeline:intake <idea>`): merge it with `- Status: Approved` to
 `main`, open an issue whose text contains its path (`docs/specs/0002-get-customer.md`), and add `factory:build`. The run ends with a comment on the issue:
@@ -131,7 +132,7 @@ the PR, or the phase and reason it stopped. To retry, fix the cause, delete the 
 one was pushed, then remove and re-add the label.
 
 **Check:** the issue gets "Factory run finished: … is ready for review", and the PR's description maps each
-acceptance criterion to its tests. Without `FACTORY_PR_TOKEN`, close and reopen the PR to start CI.
+acceptance criterion to its tests. The run starts CI on the PR's branch itself.
 
 ## 8. Deploy
 
@@ -164,6 +165,7 @@ Promote with a PR that sets `newTag` in `deploy/k8s/overlays/<env>/kustomization
   `read:packages` or `delete_repo` scope, so check private GHCR images from a workflow in the repo.
 - **Downloads from `release-assets.githubusercontent.com` fail.** Trivy and cosign run only in CI. Get a release
   asset's sha256 with `gh api repos/<o>/<r>/releases/tags/<t> --jq '.assets[]|.digest'`.
-- **A PR opened by Actions with `GITHUB_TOKEN` didn't start CI.** That's GitHub's rule; close and reopen it.
+- **A PR opened by Actions with `GITHUB_TOKEN` didn't start CI.** That's GitHub's rule. The service runner
+  dispatches CI on its branch from 0.20.0 on; for any other such PR, close and reopen it.
 - **Empty dotfiles (`.bashrc`, `.claude/`, …) appear in the repo root.** Sandbox placeholders: never stage them
   (stage by path, never `git add -A`).

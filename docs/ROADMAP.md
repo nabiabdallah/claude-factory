@@ -33,12 +33,12 @@ step's PR starts the next step, and "go" is no longer needed.
 | A1 ✅ | Autonomous-mode rules | Every action needed the owner's yes | Done: ADR 0017, PR #13 |
 | A2 ✅ | Headless runner | The pipeline only ran in an interactive session on the owner's machine | Done: ADRs 0018, 0023; java-pipeline 0.19.2. Accepted 2026-11-13 on demo-service: issue #3 with `factory:build` ended in feature PR #6 (run 43324062313, agent ~5 min, verify green in the gate and in the PR's CI), with an architect review, a test per criterion, and a code review |
 | A3 ✅ | Intake skill | Nothing turned an idea into a spec | Done: ADR 0019. Accepted 2026-11-13: issue #3 with `factory:spec` ended in spec PR #5 (run 43323066029), approved with the owner's answers and merged |
-| B0 ✅ | Guardrails applied, ADR 0020 | The never-list was a rule the agent followed, not one GitHub enforced | Done: ADR 0020, PR #17; `protect-repo.sh` applied 2026-11-12 (rulesets `main` and `release tags`, secret scanning, CodeQL, Dependabot security updates); a PR with a red required check showed `BLOCKED` (PR #18, closed). Release tags can't be moved or deleted; restricting who creates them waits for B4, when the release workflow tags by itself |
+| B0 ✅ | Guardrails applied, ADR 0020 | The never-list was a rule the agent followed, not one GitHub enforced | Done: ADR 0020, PR #17; `protect-repo.sh` applied 2026-11-12 (rulesets `main` and `release tags`, secret scanning, CodeQL, Dependabot security updates); a PR with a red required check showed `BLOCKED` (PR #18, closed). Release tags can't be moved or deleted; who may create them is still open (see "Waiting on the owner") |
 | B1 ✅ | Factory identity | The factory acted as the owner, and PRs opened with `GITHUB_TOKEN` didn't start CI | Done: ADR 0021, PR #19. App `nabiabdallah-factory-bot` (contents, pull requests, issues, workflows), installed on claude-factory; the identity check was green on 2026-11-12 (bot PR #20 started CI by itself) |
 | B2 ✅ | Factory steps run in Actions | Factory work ran on the owner's laptop, in a sandbox that blocks `gh`, Maven Central, Docker and release assets | Done: ADR 0022, PR #21. The first unattended run (2026-11-12, ~7 min) took B2a and opened bot PR #22, which had green CI and was merged |
 | B2a ✅ | Two-job service runner | The service runner (ADR 0018) gates and publishes from the checkout the agent could rewrite, so a rewritten `factory-run.sh` would pass its own gate and publish with the write token | `factory-feature.yml` in both templates split like ADR 0022: the agent job hands over a bundle and the report; the gate (including `./mvnw verify`) and publish run on a fresh checkout of the base. `ci/test-factory-run.sh` covers an agent that rewrites the runner. New java-pipeline minor release with an Upgrading note. Done: ADR 0023, java-pipeline 0.19.0 (four jobs: agent, gate, publish, report; the tag follows the merge, see "Waiting on the owner") |
 | B3 ✅ | Service provisioning | Every service needed a repo, secrets, labels and protection set up by hand | Done: ADR 0024, PRs #23, #24. `new-service.yml` provisioned demo-service (run 43314997086), where the A2/A3 acceptance run passed. The first real runs found five shipped defects, all fixed: 0.19.1 (workflow GitHub rejected; factory-parent 2.1.1 with the zlib-fixed base; actionlint in CI, ADR 0025) and 0.19.2 (services let Actions open PRs; publish reports GitHub's reason) |
-| B4 | Chaining and releases | Every hop waits for a person: "go", relabelling after a spec merges, tagging | When a spec PR with `- Status: Approved` merges, the bot adds `factory:build` to its issue. When a `plugin.json` or factory-parent version bump merges, the tag and release follow. When a step's PR merges (and once a day), the next queued step is dispatched if no step PR is open. `FACTORY_PAUSED=true` stops all dispatch. Done when merging a spec PR alone leads to a feature PR, and merging a step's PR alone starts the next step |
+| B4 (built, acceptance after the merge) | Chaining and releases | Every hop waits for a person: "go", relabelling after a spec merges, tagging | Built: ADR 0026, java-pipeline 0.20.0. `factory-chain.yml` starts the next step when a merge changes this file (and once a day); `release-tag.yml` tags a merged version bump with the App's token; in services, a merged `factory:spec` PR with `- Status: Approved` labels its issue and dispatches the build, and the runner dispatches CI on its own PRs. `FACTORY_PAUSED=true` stops step and build dispatch. Done when merging a spec PR alone leads to a feature PR (demo-service, once it has the 0.20.0 files), and merging a step's PR alone starts the next step (merging B4 itself shows it: B5 starts and 0.20.0 is tagged) |
 | B5 | Risk tiers and auto-merge | The owner merges every PR, including mechanical ones | `risk-tier.yml` labels each PR `risk:low`/`risk:high` from its changed paths (the lists in ADR 0020; any path it doesn't know counts as high). A `risk:low` PR auto-merges once required checks pass and an independent `code-reviewer` run on the final diff says APPROVE. Done when tests cover each path class, and on a real PR a low one merges by itself and a high one waits |
 | B6 | Usage brake and ledger | Nothing records what runs cost or stops dispatch when the subscription runs out | Each run's usage, result and duration are appended to a ledger on the `factory-ledger` branch. A run that hits the subscription's usage limit ends as `usage-limit` (not a failure of the step); dispatch pauses until the reset and the inbox says so. The per-run `FACTORY_MAX_BUDGET_USD` stays as a runaway guard. Done when a simulated limit pauses dispatch and the ledger shows each run |
 | B7 | Maintenance agent and decision inbox | Dependabot PRs, plugin drift and expiring exceptions wait until the owner notices; questions arrive one at a time | A weekly job: triage Dependabot (merge if low; otherwise propose the fix or closing), template-drift and plugin-upgrade PRs to services, flags expiring `.trivyignore` entries and the yearly `CLAUDE_CODE_OAUTH_TOKEN`. One pinned "Factory inbox" issue gets every stop-and-report (decision needed and a recommendation) and a weekly digest (runs, usage, auto-merges, waiting). Done when the digest posts and a stopped run shows up in the inbox |
@@ -54,7 +54,7 @@ and the alert-to-issue loop wait for a real cluster.
 Where the work runs: a cloud session can't download Maven dependencies, so factory CI on the PR is the judge
 there. Use the owner's machine for steps that change the templates or factory-parent.
 
-## Status (2026-11-12)
+## Status (2026-11-13)
 
 ### Done
 | Step | Result | Record |
@@ -68,10 +68,19 @@ there. Use the owner's machine for steps that change the templates or factory-pa
 | #7 Factory as a product | Release tags `java-pipeline-vX.Y.Z` with GitHub Releases; new projects pinned to their plugin release (`ref`, `sparsePaths`); changelogs for the plugin and factory-parent, checked on every PR and release; `docs/ONBOARDING.md`; docs link check; java-pipeline 0.16.0 | ADR 0015, PR #8, tag `java-pipeline-v0.16.0` |
 
 ### Waiting on the owner
-- demo-service PR #6 (the A2 acceptance feature) is yours to merge. Its code review left 4 points for you: a
-  repeated `name` parameter is joined as "a,b"; 400 validation is hand-built in the controller (DomainException
-  maps to 422); "characters" means code points; `GreetCommand` doesn't validate itself. The App isn't on
-  demo-service yet (github.com/settings/installations).
+- **Merging B4's PR acts by itself:** it tags `java-pipeline-v0.20.0` (the release follows) and starts step B5
+  unattended. To hold the queue, set the repository variable `FACTORY_PAUSED=true` before merging.
+- **B4 acceptance on demo-service:** it needs the 0.20.0 files (the changelog's Upgrading note: three files, two
+  edits in `ci.yml`, the `ref`). Say yes and a session opens that PR; then a `factory:spec` issue whose spec PR
+  you merge should end in a feature PR with green CI and no other click.
+- **Who may create release tags:** today anyone with write access. Recommendation: a second tag ruleset that
+  restricts creation to the factory App and repository admins, added to `ci/protect-repo.sh` and applied by you
+  (a ruleset change is yours alone).
+- demo-service PR #6 (the A2 acceptance feature) was merged on 2026-11-13 on your word. Its code review left 4
+  points to decide before the next feature copies them: a repeated `name` parameter is joined as "a,b"; 400
+  validation is hand-built in the controller (DomainException maps to 422); "characters" means code points;
+  `GreetCommand` doesn't validate itself.
+- The App on demo-service: not needed. Services run on their own `GITHUB_TOKEN` (ADR 0026); skip the install.
 - Local leftovers: `~/dev/projects/demo-service` (0.18.0, never pushed) and `~/dev/projects/demo-service.stale-0.9.1`
   can be deleted, since B3 provisions the repo. Update the local plugin (`/plugin`), which is still at 0.9.1.
 - Review payments-service PR #10 (spec 0005).
