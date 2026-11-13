@@ -26,20 +26,26 @@ saved() { [[ -s "$state/$1" ]] || die "no '$1' from an earlier phase (run the ph
 output() { [[ -z "${GITHUB_OUTPUT:-}" ]] || echo "$1=$2" >> "$GITHUB_OUTPUT"; }
 
 # Files whose change makes the PR risk:high (ADR 0020): CI and workflows (the factory's and the templates'), the
-# guardrails and the App, the rules agents follow, and the ADRs that set those rules.
-protected_re='(^|/)\.github/|^(\.claude/|CLAUDE\.md$|ci/protect-repo\.sh$|ci/factory-app/|ci/create-factory-app\.sh$|docs/factory-adr/00(17|2[0-4])-)'
+# guardrails and the App, the rules agents follow, and the ADRs that set those rules (0017, 0020-0024, 0026).
+protected_re='(^|/)\.github/|^(\.claude/|CLAUDE\.md$|ci/protect-repo\.sh$|ci/factory-app/|ci/create-factory-app\.sh$|docs/factory-adr/00(17|2[0-46])-)'
+
+# Queue rows look like "| B2 | ..." (to do), "| B1 ✅ | ..." (done) or "| A2 (built, …) | ..." (waiting on the
+# owner). Only a bare id is runnable.
+queue() { sed -n 's/^| \([AB][0-9][0-9]*[a-z]\{0,1\}\) |.*/\1/p' docs/ROADMAP.md; }
 
 phase="${1:-}"
-[[ -n "$phase" ]] || { echo "usage: factory-step.sh resolve|tools|agent|pack|gate|publish|failed" >&2; exit 2; }
-[[ "$phase" == failed ]] || echo "$phase" > "$state/phase"
+[[ -n "$phase" ]] || { echo "usage: factory-step.sh queue|resolve|tools|agent|pack|gate|publish|failed" >&2; exit 2; }
+[[ "$phase" == failed || "$phase" == queue ]] || echo "$phase" > "$state/phase"
 
 case "$phase" in
+  queue) # the unfinished steps, in order (factory-chain.sh asks before it dispatches a run)
+    queue
+    ;;
+
   resolve)
     need GITHUB_REPOSITORY
     [[ "${FACTORY_PAUSED:-}" != true ]] || die "the factory is paused (repository variable FACTORY_PAUSED=true)"
-    # Queue rows look like "| B2 | ..." (to do), "| B1 ✅ | ..." (done) or "| A2 (built, …) | ..." (waiting on the
-    # owner). Only a bare id is runnable.
-    runnable="$(sed -n 's/^| \([AB][0-9][0-9]*[a-z]\{0,1\}\) |.*/\1/p' docs/ROADMAP.md)"
+    runnable="$(queue)"
     [[ -n "$runnable" ]] || die "no unfinished step in the roadmap's queue"
     if [[ -n "${STEP:-}" ]]; then
       [[ "$STEP" =~ ^[AB][0-9]{1,2}[a-z]?$ ]] || die "step must look like B2 or B2a"

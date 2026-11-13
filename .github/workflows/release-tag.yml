@@ -1,0 +1,44 @@
+name: Release tag
+
+# Tags a merged version bump (factory ADR 0026): when plugin.json or factory-parent's pom.xml changes on main and
+# <component>-v<version> doesn't exist yet, the tag is created on the merged commit. release-plugin.yml and
+# publish-parent.yml then run as for a tag pushed by hand. The tag is created with the factory App's token,
+# because a tag pushed with GITHUB_TOKEN starts no workflow. Run it by hand to retry.
+on:
+  push:
+    branches: [main]
+    paths:
+      - plugins/java-pipeline/.claude-plugin/plugin.json
+      - parents/factory-parent/pom.xml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Mint an App token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.FACTORY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FACTORY_APP_KEY }}
+
+      - name: Tag each component whose version has no tag yet
+        run: .github/scripts/factory-chain.sh release
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}

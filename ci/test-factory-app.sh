@@ -93,7 +93,7 @@ expect "bot-identity: rejects an odd slug" "! (cd '$repo' && APP_SLUG='x\$(id)' 
 # --- workflows: the key reaches only the token action; no expression inside a run command
 key_ok='private-key: [$][{][{] secrets[.]FACTORY_APP_KEY [}][}]$|HAS_KEY: [$][{][{] secrets[.]FACTORY_APP_KEY != .. [}][}]$'
 key_lines() { grep -n 'secrets[.]FACTORY_APP_KEY' "$1" | grep -v '^[0-9]*:\s*#' | grep -vE "$key_ok" || true; }
-for wf in .github/workflows/factory-identity.yml .github/workflows/base-image.yml; do
+for wf in .github/workflows/factory-identity.yml .github/workflows/base-image.yml .github/workflows/release-tag.yml; do
   if [[ -z "$(key_lines "$wf")" ]]; then ok "$wf: FACTORY_APP_KEY only as the token action's private-key"
   else bad "$wf: FACTORY_APP_KEY used elsewhere: $(key_lines "$wf")"; fi
   if grep -qE '^\s+run:.*[$][{][{]' "$wf"; then bad "$wf: a run command interpolates an expression"

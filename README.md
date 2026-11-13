@@ -61,9 +61,9 @@ cd ~/dev/projects/customer-service && claude
 /java-pipeline:new-feature Add GET /customers/{id}. Write the spec first.
 ```
 
-Unattended, from a service repo on GitHub (ADRs 0018, 0019): the label `factory:spec` on an issue turns its idea
-into a spec pull request; the label `factory:build` on an issue with an approved spec runs the pipeline in GitHub
-Actions and ends in a pull request
+Unattended, from a service repo on GitHub (ADRs 0018, 0019, 0026): the label `factory:spec` on an issue turns its
+idea into a spec pull request; merging that pull request with the spec approved starts the build, which ends in a
+pull request with the code. The label `factory:build` does the same for an issue that names a spec you wrote
 ([ONBOARDING.md](docs/ONBOARDING.md), step 7).
 
 Agents are available as `java-pipeline:architect-reviewer`, `java-pipeline:test-writer` and
@@ -119,15 +119,15 @@ Both components use semver tags and a Keep a Changelog file; `ci/check-release-n
 version and newest changelog section disagree (ADR 0015). Tags are never moved or reused.
 
 - **java-pipeline:** bump `version` in `plugins/java-pipeline/.claude-plugin/plugin.json` and add its section to
-  `plugins/java-pipeline/CHANGELOG.md` (with an **Upgrading** note if projects must act) in the PR. After merge:
-  `git tag java-pipeline-vX.Y.Z && git push origin java-pipeline-vX.Y.Z`. `release-plugin.yml` checks the tag and
-  creates the GitHub Release from the changelog section. New projects pin the tag (`ref` in their
+  `plugins/java-pipeline/CHANGELOG.md` (with an **Upgrading** note if projects must act) in the PR. After the
+  merge, `release-tag.yml` creates the tag `java-pipeline-vX.Y.Z` on the merge commit (ADR 0026);
+  `release-plugin.yml` checks the tag and creates the GitHub Release from the changelog section. New projects pin the tag (`ref` in their
   `.claude/settings.json`); existing ones move by bumping it. With the local directory marketplace, edits take
   effect at the next session or `/reload-plugins`.
 - **factory-parent:** bump `<version>` in `parents/factory-parent/pom.xml`, update the templates'
-  `<parent><version>`, add the section to `parents/factory-parent/CHANGELOG.md`. After merge:
-  `git tag factory-parent-vX.Y.Z && git push origin factory-parent-vX.Y.Z`. `publish-parent.yml` checks the tag
-  and the changelog and deploys to GitHub Packages; Dependabot then opens upgrade PRs in services.
+  `<parent><version>`, add the section to `parents/factory-parent/CHANGELOG.md`. After the merge,
+  `release-tag.yml` creates the tag `factory-parent-vX.Y.Z`; `publish-parent.yml` checks the tag and the changelog
+  and deploys to GitHub Packages; Dependabot then opens upgrade PRs in services.
 
 ## Repo guardrails
 

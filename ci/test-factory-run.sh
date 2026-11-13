@@ -46,6 +46,13 @@ mkdir -p "$work/bin" "$work/gh"
 cat > "$work/bin/gh" <<'SH'
 #!/usr/bin/env bash
 echo "$*" >> "$FAKE_GH/calls"
+case "$*" in # chaining (ADR 0026): dispatches, the issue itself, its labels, the pull request of a commit
+  *"/actions/workflows/ci.yml/dispatches "*) [[ ! -f "$FAKE_GH/ci-refused" ]] || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }; exit 0 ;;
+  *"/actions/workflows/factory-feature.yml/dispatches "*) [[ ! -f "$FAKE_GH/dispatch-refused" ]] || exit 1; exit 0 ;;
+  *"/commits/"*"/pulls") cat "$FAKE_GH/pulls.json" 2>/dev/null || echo '[]'; exit 0 ;;
+  *"/issues/5/labels "*) exit 0 ;;
+  "api repos/acme/demo/issues/5") cat "$FAKE_GH/issue.json" 2>/dev/null || exit 1; exit 0 ;;
+esac
 case "$2" in
   */collaborators/*/permission) cat "$FAKE_GH/permission" ;;
   */branches/*) [[ -f "$FAKE_GH/branch-exists" ]] && echo branch || exit 1 ;;
@@ -135,7 +142,8 @@ fresh() { # back to the untouched project, no state, a collaborator with write a
   rm -rf "$FACTORY_STATE" "$FAKE_GH"/* "$work/q" "$work/r" "$work/state-q" "$work/state-r"
   git --git-dir "$work/remote.git" update-ref -d refs/heads/factory/issue-5
   git --git-dir "$work/remote.git" update-ref -d refs/heads/factory/spec-5
-  unset FACTORY_LABEL ISSUE_TITLE
+  unset FACTORY_LABEL ISSUE_TITLE GITHUB_EVENT_NAME FACTORY_PAUSED FACTORY_BEFORE GITHUB_SHA
+  export SENDER=owner
   echo write > "$FAKE_GH/permission"
   export ISSUE_BODY="Please build docs/specs/0001-greet.md" FACTORY_VERIFY_CMD=true SCENARIO=good
 }
@@ -225,10 +233,16 @@ check "the pull request targets main from the issue's branch, titled after the s
   grep -qE 'repos/acme/demo/pulls -f title=feat: Greet a customer \(#5\) -f head=factory/issue-5 -f base=main' "$FAKE_GH/calls"
 check "the pull request body carries the report and closes the issue" \
   grep -qzE 'What was built.*Closes #5' "$work/state-r/pr-body.md"
-check "the issue is told, with the note about CI on token-opened pull requests" \
-  grep -qE 'issues/5/comments .*pull/7 is ready for review\. CI does not start' "$FAKE_GH/calls"
+check "publish starts CI on the branch (GitHub starts none on a token-opened pull request)" \
+  grep -qE '^api --method POST repos/acme/demo/actions/workflows/ci\.yml/dispatches -f ref=factory/issue-5$' "$FAKE_GH/calls"
+check "the issue is told that CI was started" \
+  grep -qE 'issues/5/comments .*pull/7 is ready for review\. CI was started on the branch' "$FAKE_GH/calls"
+fresh; touch "$FAKE_GH/ci-refused"; expect pass "publish still succeeds when CI can't be started" $FULL
+check "(and the issue is told to close and reopen the pull request)" \
+  grep -qE 'issues/5/comments .*CI could not be started .*close and reopen' "$FAKE_GH/calls"
 fresh; FACTORY_PR_TOKEN_SET=true expect pass "publish with FACTORY_PR_TOKEN" $FULL
-check "no CI note when FACTORY_PR_TOKEN is set" bash -c '! grep -q "CI does not start" "$FAKE_GH/calls"'
+check "with FACTORY_PR_TOKEN the pull request starts CI itself: no dispatch, no note" \
+  bash -c '! grep -qE "ci\.yml/dispatches|CI was started|CI could not" "$FAKE_GH/calls"'
 fresh; touch "$FAKE_GH/pr-refused"; expect fail "a pull request GitHub refuses fails publish" $FULL
 check "(with GitHub's reason and the setting that fixes it)" \
   grep -q "GitHub refused the pull request: .*not permitted to create or approve pull requests.*Allow GitHub Actions to create" "$work/state-r/failure"
@@ -276,5 +290,56 @@ fresh; ISSUE_BODY="Say hello"; comment stranger NONE 'Build docs/specs/0001-gree
 expect fail "a spec path in a stranger's comment doesn't count" resolve
 fresh; ISSUE_BODY="Build docs/specs/0001-greet.md"; comment owner OWNER 'docs/specs/0002-draft.md'
 expect pass "a spec path in the issue text wins over comments" resolve
+
+# a dispatched run (ADR 0026): the chain workflow or the owner starts it with an issue number and a label
+issue_json() { jq -n --arg body "$1" --arg state "${2:-open}" --argjson labels "${3:-[]}" '{title: "Say hello", body: $body, state: $state, labels: $labels}' > "$FAKE_GH/issue.json"; }
+dispatched() { fresh; export GITHUB_EVENT_NAME=workflow_dispatch; unset SENDER ISSUE_BODY; : > "$FAKE_GH/permission"; }
+dispatched; issue_json "Please build docs/specs/0001-greet.md"; expect pass "a dispatched build reads the issue and needs no sender" resolve
+check "(the spec comes from the issue it read)" test "$(cat "$FACTORY_STATE/spec")" = docs/specs/0001-greet.md
+check "(and nobody's permission was looked up)" bash -c '! grep -q collaborators "$FAKE_GH/calls"'
+dispatched; expect fail "a dispatched run for an issue that doesn't exist is refused" resolve
+dispatched; issue_json "docs/specs/0001-greet.md"; jq '.pull_request = {}' "$FAKE_GH/issue.json" > "$FAKE_GH/i" && mv "$FAKE_GH/i" "$FAKE_GH/issue.json"
+expect fail "a dispatched run for a pull request number is refused" resolve
+dispatched; issue_json "docs/specs/0002-draft.md"; expect fail "a dispatched build of a draft spec is refused all the same" resolve
+dispatched; export FACTORY_LABEL=factory:spec SCENARIO=spec-draft; issue_json 'factory-run-test idea marker'
+expect pass "a dispatched spec run takes the idea from the issue it read" $TO_GATE
+
+# chain (ADR 0026): a merged factory:spec pull request whose spec is approved starts its own build
+merged() { # merged <head ref> [<head repo>]: the pull request GitHub reports for the pushed commit
+  jq -n --arg ref "$1" --arg repo "${2:-acme/demo}" '[{merged_at: "2026-01-01T00:00:00Z", head: {ref: $ref, repo: {full_name: $repo}}}]' > "$FAKE_GH/pulls.json"
+}
+push() { # push <spec file> <status>: main gets a commit that writes that spec; the event's before/after
+  spec "$1" "$2" "1. Given x, when y, then z."; git add "docs/specs/$1"; g commit -q -m "spec: $1"
+  export FACTORY_BEFORE="$c0" GITHUB_SHA; GITHUB_SHA="$(git rev-parse HEAD)"
+}
+started() { grep -qE '^api --method POST repos/acme/demo/actions/workflows/factory-feature\.yml/dispatches -f ref=main -f inputs\[issue\]=5 -f inputs\[label\]=factory:build$' "$FAKE_GH/calls"; }
+nothing() { ! grep -qE 'dispatches|/labels ' "$FAKE_GH/calls"; }
+chain() { fresh; export GITHUB_REF_NAME=main; issue_json "Say hello"; merged factory/spec-5; }
+chain; push 0007-new.md Approved; expect pass "chain: a merged, approved spec pull request starts the build" chain
+check "the issue gets the label factory:build" grep -qE '^api --method POST repos/acme/demo/issues/5/labels -f labels\[\]=factory:build$' "$FAKE_GH/calls"
+check "the build is dispatched for that issue" started
+check "the issue is told which spec is being built" grep -qE 'issues/5/comments .*Spec approved: `docs/specs/0007-new\.md`' "$FAKE_GH/calls"
+chain; push 0002-draft.md Approved; expect pass "chain: a draft the owner set to Approved in the pull request starts the build" chain
+check "(dispatched)" started
+chain; push 0007-new.md Approved; FACTORY_BEFORE=0000000000000000000000000000000000000000; expect pass "chain: without a usable 'before' it compares with the previous commit" chain
+check "(dispatched)" started
+chain; push 0007-new.md Draft; expect pass "chain: a merged draft starts nothing" chain
+check "(nothing labelled or dispatched)" nothing
+chain; push 0001-greet.md Approved; expect pass "chain: a spec that was already approved starts nothing" chain
+check "(nothing labelled or dispatched)" nothing
+chain; push 0007-new.md Approved; merged feat/my-spec; expect pass "chain: a spec approved outside a factory:spec pull request starts nothing" chain
+check "(nothing labelled or dispatched)" nothing
+chain; push 0007-new.md Approved; merged factory/spec-5 stranger/demo; expect pass "chain: a fork's branch named factory/spec-N doesn't count" chain
+check "(nothing labelled or dispatched)" nothing
+chain; push 0007-new.md Approved; export FACTORY_PAUSED=true; expect pass "chain: paused starts nothing" chain
+check "(nothing labelled or dispatched)" nothing
+chain; push 0007-new.md Approved; issue_json "Say hello" closed; expect pass "chain: a closed issue starts nothing" chain
+check "(nothing labelled or dispatched)" nothing
+chain; push 0007-new.md Approved; issue_json "Say hello" open '[{"name": "factory:build"}]'; expect pass "chain: an issue that already has factory:build starts nothing more" chain
+check "(nothing labelled or dispatched)" nothing
+chain; push 0007-new.md Approved; touch "$FAKE_GH/branch-exists"; expect pass "chain: an existing factory/issue-N branch starts nothing" chain
+check "(nothing labelled or dispatched)" nothing
+chain; push 0007-new.md Approved; touch "$FAKE_GH/dispatch-refused"; expect fail "chain: a build that can't be dispatched fails the run" chain
+fresh
 
 [[ "$fails" -eq 0 ]] && echo "factory-run: all cases behave as expected" || { echo "factory-run: test FAILED"; exit 1; }

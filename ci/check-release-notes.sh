@@ -3,6 +3,7 @@
 #   ci/check-release-notes.sh                 every PR: each component's newest changelog section is its version
 #   ci/check-release-notes.sh --tag <tag>     release: <component>-v<version> matches the component and has notes
 #   ci/check-release-notes.sh --notes <tag>   as --tag, then prints that version's notes (the GitHub Release body)
+#   ci/check-release-notes.sh --tags          prints each component's release tag for its current version
 # Components: java-pipeline (plugin.json), factory-parent (pom.xml). Changelogs: Keep a Changelog,
 # sections "## [X.Y.Z] - YYYY-MM-DD", newest first; an "## [Unreleased]" section is ignored.
 set -euo pipefail
@@ -52,6 +53,13 @@ case "${1:-}" in
     [[ "$fail" -eq 0 ]] && echo "release notes: OK"
     exit "$fail"
     ;;
+  --tags)
+    for name in java-pipeline factory-parent; do
+      version="$(version_of "$name")"
+      [[ -n "$version" ]] || { problem "$name: no version found"; exit 1; }
+      echo "$name-v$version"
+    done
+    ;;
   --tag|--notes)
     tag="${2:-}"
     [[ "$tag" =~ ^([a-z][a-z-]*)-v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { problem "not a release tag: '$tag'"; exit 1; }
@@ -68,7 +76,7 @@ case "${1:-}" in
     fi
     ;;
   *)
-    echo "usage: $0 [--tag <tag> | --notes <tag>]" >&2
+    echo "usage: $0 [--tag <tag> | --notes <tag> | --tags]" >&2
     exit 2
     ;;
 esac

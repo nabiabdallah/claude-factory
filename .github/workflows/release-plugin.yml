@@ -1,7 +1,8 @@
 name: Release java-pipeline
 
 # Release the plugin (factory ADR 0015): bump "version" in plugins/java-pipeline/.claude-plugin/plugin.json and add
-# its section to plugins/java-pipeline/CHANGELOG.md in the PR, merge, then tag the merge commit:
+# its section to plugins/java-pipeline/CHANGELOG.md in the PR and merge. release-tag.yml then creates the tag
+# java-pipeline-vX.Y.Z on the merge commit (factory ADR 0026), which starts this workflow. By hand, if needed:
 #   git tag java-pipeline-v0.16.0 && git push origin java-pipeline-v0.16.0
 # Projects pin that tag ("ref" in .claude/settings.json), so a tag is never moved or reused.
 on:
