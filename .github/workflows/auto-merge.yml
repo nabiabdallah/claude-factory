@@ -1,0 +1,144 @@
+name: Auto-merge
+
+# Merges a risk:low pull request once its required checks are green and an independent code-reviewer run on the
+# final diff says APPROVE (factory ADR 0027, ADR 0020). Three jobs, so nothing that reads the PR holds a write token:
+#   eligible  no secrets: is the PR open, in this repo, and low by its paths right now?
+#   review    the Claude credential only: read-only tools on a checkout of the PR head
+#   merge     re-checks the same sha, the tier and the required checks with an App token, then merges
+# The merge uses the App's token so the push to main starts factory-chain.yml and release-tag.yml (a GITHUB_TOKEN
+# merge starts no workflow). Runs when CI finishes on a PR; by hand with a PR number to retry.
+# Secrets: CLAUDE_CODE_OAUTH_TOKEN, FACTORY_APP_KEY. Variables: FACTORY_APP_CLIENT_ID, FACTORY_PAUSED (true stops it).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Pull request number"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-merge
+  cancel-in-progress: false
+
+jobs:
+  eligible:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    outputs:
+      eligible: ${{ steps.pick.outputs.eligible }}
+      pr: ${{ steps.pick.outputs.pr }}
+      sha: ${{ steps.pick.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Which pull request (the run's commit, or the input), and may it merge by itself
+        id: pick
+        run: |
+          if [[ -z "$PR" ]]; then
+            PR="$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/pulls" --jq '[.[] | select(.state == "open")][0].number // empty')"
+          fi
+          if [[ -z "$PR" ]]; then
+            echo "No open pull request for this run: nothing to merge." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PR="$PR" .github/scripts/risk-tier.sh eligible
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          FACTORY_PAUSED: ${{ vars.FACTORY_PAUSED }}
+
+  review:
+    needs: eligible
+    if: needs.eligible.outputs.eligible == 'true' && vars.FACTORY_PAUSED != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      verdict: ${{ steps.review.outputs.verdict }}
+    steps:
+      # The trusted side: this script and the reviewer's definition come from the default branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      # The PR's head, read-only data for the reviewer: nothing in it is run.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.eligible.outputs.sha }}
+          path: pr
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install the pinned Claude Code CLI
+        run: .github/scripts/factory-step.sh tools
+
+      - name: Independent code review of the final diff
+        id: review
+        run: .github/scripts/risk-tier.sh review
+        env:
+          PR: ${{ needs.eligible.outputs.pr }}
+          SHA: ${{ needs.eligible.outputs.sha }}
+          PR_DIR: ${{ github.workspace }}/pr
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FACTORY_MAX_BUDGET_USD: ${{ vars.FACTORY_MAX_BUDGET_USD }}
+
+      - name: Keep the review
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: auto-merge-review
+          path: ${{ runner.temp }}/risk-tier/review.md
+          if-no-files-found: ignore
+
+  merge:
+    needs: [eligible, review]
+    if: needs.review.outputs.verdict == 'approve'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: auto-merge-review
+          path: ${{ runner.temp }}/handoff
+
+      - name: Mint an App token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.FACTORY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FACTORY_APP_KEY }}
+
+      - name: Re-check the sha, the tier and the required checks, then merge
+        run: .github/scripts/risk-tier.sh merge
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ needs.eligible.outputs.pr }}
+          SHA: ${{ needs.eligible.outputs.sha }}
+          VERDICT: ${{ needs.review.outputs.verdict }}
+          FACTORY_HANDOFF: ${{ runner.temp }}/handoff
+          FACTORY_PAUSED: ${{ vars.FACTORY_PAUSED }}
