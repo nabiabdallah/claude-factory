@@ -54,9 +54,13 @@ for t in plugins/java-pipeline/templates/*; do
   agent_job=$(sed -n '/^  agent:/,/^  gate:/p' "$wf")
   ! grep -qE '^\s+[a-z-]+: write\b' <<<"$agent_job" || problem "$wf: the agent job asks for a write permission"
   ! grep -qE 'factory-run\.sh (unpack|gate|publish)' "$wf" || problem "$wf: unpack, gate and publish must run the copy kept outside the checkout"
-  # ADR 0026: the chain runs the default branch's runner, and CI can be dispatched for the runner's pull requests.
+  # ADR 0026: the chain runs the default branch's runner.
   grep -q 'factory-run.sh chain' "$t/.github/workflows/factory-chain.yml" 2>/dev/null || problem "$t: no factory-chain.yml that runs the chain phase"
-  grep -qE '^  workflow_dispatch:' "$t/.github/workflows/ci.yml" || problem "$t: ci.yml can't be dispatched, so the runner's pull requests get no CI"
+  # ADR 0028: the App's key reaches only the token action of the publish job, which runs nothing the agent wrote.
+  [[ "$(grep -c 'FACTORY_APP_KEY' "$wf")" == "$(grep -cE "^      FACTORY_APP: [$][{][{] secrets[.]FACTORY_APP_KEY != '' [}][}]$|^          private-key: [$][{][{] secrets[.]FACTORY_APP_KEY [}][}]$|^# .*FACTORY_APP_KEY" "$wf")" ]] \
+    || problem "$wf: FACTORY_APP_KEY is used outside the token action"
+  ! sed -n '/^  agent:/,/^  publish:/p' "$wf" | grep -qE 'secrets\.FACTORY_APP|steps\.app\.' || problem "$wf: the agent or gate job can reach the App"
+  grep -q "GH_TOKEN: [$][{][{] steps.app.outputs.token || secrets.FACTORY_PR_TOKEN || github.token [}][}]" "$wf" || problem "$wf: the publish job doesn't open the pull request as the App"
   if [[ -z "$first" ]]; then first="$t"; else
     cmp -s "$first/.github/scripts/factory-run.sh" "$runner" || problem "$runner differs from $first's"
     cmp -s "$first/.github/workflows/factory-feature.yml" "$wf" || problem "$wf differs from $first's"

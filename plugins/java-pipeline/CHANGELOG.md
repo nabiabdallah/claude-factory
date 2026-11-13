@@ -5,6 +5,24 @@ All notable changes to the plugin, newest first ([Keep a Changelog](https://keep
 Each version is tagged `java-pipeline-vX.Y.Z`; projects pin the tag in `.claude/settings.json` (`ref`).
 Decisions are in `docs/factory-adr/`.
 
+## [0.20.1] - 2026-11-14
+
+- Fixed: pull requests opened by the runner did not get CI by themselves, despite 0.20.0's note. The CI run the
+  runner dispatched passed, but GitHub doesn't count a dispatched run for a pull request's required checks, so the
+  PR stayed blocked until someone closed and reopened it.
+- The runner now opens its pull requests as the factory's GitHub App when the repository has the App's key
+  (ADR 0028): such a PR starts CI like anyone's. `FACTORY_PR_TOKEN` still works. With neither, the PR is opened
+  with the workflow's token as before, and the issue comment says to close and reopen it.
+- The publish job no longer dispatches `ci.yml` and no longer asks for `actions: write`.
+- In claude-factory: provisioning gives a new service the App and its key; the `Service app` workflow does it for
+  an existing one.
+
+**Upgrading:** copy `factory-run.sh` (`.github/scripts/`) and `factory-feature.yml` (`.github/workflows/`) from
+`templates/skeleton/.github/`, and set `ref` to `java-pipeline-v0.20.1`. Then give the repository the App: in
+claude-factory, run the `Service app` workflow with the repository's name (it sets the secrets `FACTORY_APP_KEY`
+and `FACTORY_APP_CLIENT_ID`; if it says it could not add the repo to the App, add it with the link it prints and
+run it again). `ci.yml` is unchanged.
+
 ## [0.20.0] - 2026-11-13
 
 - An approved spec starts its own build (ADR 0026). The new `factory-chain.yml` runs when the pull request of a
