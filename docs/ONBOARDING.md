@@ -62,7 +62,8 @@ enable the plugin if it's missing.
 **Or let the factory do steps 4, 5 and 7's setup** ([ADR 0024](factory-adr/0024-service-provisioning.md)):
 `gh workflow run new-service.yml --repo nabiabdallah/claude-factory -f name=customer-service -f
 package=com.example.customers`. It scaffolds from the latest release, creates the public repo, sets its secrets
-and labels, adds the factory's App and applies the guardrails. The by-hand route follows.
+and labels, adds the factory's App (with its key, so the runner's pull requests start CI) and applies the
+guardrails. The by-hand route follows; after it, run `service-app.yml` with the repo's name for the App.
 
 ```bash
 git config user.email 99053318+nabiabdallah@users.noreply.github.com   # public repo: no private email in commits
@@ -165,7 +166,9 @@ Promote with a PR that sets `newTag` in `deploy/k8s/overlays/<env>/kustomization
   `read:packages` or `delete_repo` scope, so check private GHCR images from a workflow in the repo.
 - **Downloads from `release-assets.githubusercontent.com` fail.** Trivy and cosign run only in CI. Get a release
   asset's sha256 with `gh api repos/<o>/<r>/releases/tags/<t> --jq '.assets[]|.digest'`.
-- **A PR opened by Actions with `GITHUB_TOKEN` didn't start CI.** That's GitHub's rule. The service runner
-  dispatches CI on its branch from 0.20.0 on; for any other such PR, close and reopen it.
+- **A PR opened by Actions with `GITHUB_TOKEN` didn't start CI.** That's GitHub's rule, and a CI run dispatched on
+  the branch doesn't count for the PR either. Close and reopen it. For a service's runner PRs, end it for good:
+  `gh workflow run service-app.yml --repo nabiabdallah/claude-factory -f name=<service>` gives the service the
+  factory's App, and from java-pipeline 0.20.1 its runner opens PRs as the App ([ADR 0028](factory-adr/0028-app-opens-service-prs.md)).
 - **Empty dotfiles (`.bashrc`, `.claude/`, …) appear in the repo root.** Sandbox placeholders: never stage them
   (stage by path, never `git add -A`).
