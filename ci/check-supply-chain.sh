@@ -54,9 +54,13 @@ for t in plugins/java-pipeline/templates/*; do
   agent_job=$(sed -n '/^  agent:/,/^  gate:/p' "$wf")
   ! grep -qE '^\s+[a-z-]+: write\b' <<<"$agent_job" || problem "$wf: the agent job asks for a write permission"
   ! grep -qE 'factory-run\.sh (unpack|gate|publish)' "$wf" || problem "$wf: unpack, gate and publish must run the copy kept outside the checkout"
+  # ADR 0026: the chain runs the default branch's runner, and CI can be dispatched for the runner's pull requests.
+  grep -q 'factory-run.sh chain' "$t/.github/workflows/factory-chain.yml" 2>/dev/null || problem "$t: no factory-chain.yml that runs the chain phase"
+  grep -qE '^  workflow_dispatch:' "$t/.github/workflows/ci.yml" || problem "$t: ci.yml can't be dispatched, so the runner's pull requests get no CI"
   if [[ -z "$first" ]]; then first="$t"; else
     cmp -s "$first/.github/scripts/factory-run.sh" "$runner" || problem "$runner differs from $first's"
     cmp -s "$first/.github/workflows/factory-feature.yml" "$wf" || problem "$wf differs from $first's"
+    cmp -s "$first/.github/workflows/factory-chain.yml" "$t/.github/workflows/factory-chain.yml" || problem "$t's factory-chain.yml differs from $first's"
   fi
 done
 

@@ -5,6 +5,23 @@ All notable changes to the plugin, newest first ([Keep a Changelog](https://keep
 Each version is tagged `java-pipeline-vX.Y.Z`; projects pin the tag in `.claude/settings.json` (`ref`).
 Decisions are in `docs/factory-adr/`.
 
+## [0.20.0] - 2026-11-13
+
+- An approved spec starts its own build (ADR 0026). The new `factory-chain.yml` runs when the pull request of a
+  `factory:spec` run is merged with `- Status: Approved`: it puts `factory:build` on the issue and starts the
+  build. The variable `FACTORY_PAUSED=true` stops it. Specs approved any other way still need the label.
+- `factory-feature.yml` can be dispatched with an issue number and a label (that is how the chain starts it; you
+  can too, from the Actions tab).
+- Pull requests opened by the runner now get CI by themselves: the publish job starts `ci.yml` on the branch, and
+  `ci.yml` accepts `workflow_dispatch`. No close-and-reopen, and no `FACTORY_PR_TOKEN` needed.
+- In claude-factory: merging a version bump creates its release tag, and merging a step's PR starts the next
+  queued step.
+
+**Upgrading:** copy `factory-run.sh` (`.github/scripts/`), `factory-feature.yml` and the new `factory-chain.yml`
+(`.github/workflows/`) from `templates/skeleton/.github/`. In your `ci.yml`, add `workflow_dispatch:` under `on:`
+and replace the `manifests` job's last step with the template's (or copy `ci.yml` if you never changed it). Set
+`ref` to `java-pipeline-v0.20.0`. No new label, secret or setting.
+
 ## [0.19.2] - 2026-11-13
 
 - Fixed: when GitHub refused the pull request or the push, the run's issue comment only said "the step failed before
