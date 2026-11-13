@@ -4,6 +4,8 @@
 - Date: 2026-11-13
 - Deciders: Noel Abi Abdallah
 - Implements: step B4 of [ADR 0020](0020-self-running-factory.md)
+- Amended by: [ADR 0028](0028-app-opens-service-prs.md). The CI dispatch below did not work (dispatched checks
+  don't count on a pull request); services now use the App.
 
 ## Context
 After B0–B3 the factory can run a step or a feature unattended, but every hop between runs still waits for the
@@ -40,10 +42,11 @@ label, a pushed tag or an opened pull request stays silent. The one exception is
 - **CI on the runner's pull requests (services).** The publish job dispatches `ci.yml` on the branch it pushed
   (`actions: write`), and `ci.yml` accepts `workflow_dispatch`. The check runs land on the pull request's head
   commit, so the close-and-reopen is gone without a token or the App in each service. `FACTORY_PR_TOKEN` still
-  works as before; with it nothing is dispatched.
+  works as before; with it nothing is dispatched. **Withdrawn in 0.20.1 (ADR 0028):** the acceptance run showed
+  the dispatched checks don't count for the pull request.
 - **Services do not use the App.** Everything above runs on each service's own `GITHUB_TOKEN`. The App stays the
   factory repo's identity (step PRs, release tags). B3 adds services to the App's installation, which has no
-  effect today and can be skipped.
+  effect today and can be skipped. **Reversed by ADR 0028:** the runner opens its pull requests as the App.
 - Tested by `ci/test-factory-chain.sh` (new) and `ci/test-factory-run.sh`, both with a fake `gh`.
 
 ## Alternatives considered
@@ -60,7 +63,7 @@ label, a pushed tag or an opened pull request stays silent. The one exception is
 ## Consequences
 - Positive: merging a step's PR starts the next step; merging an approved spec PR starts its build; merging a
   version bump publishes the release. The owner's part is review and merge.
-- Positive: service PRs get CI without a second token.
+- Positive: service PRs get CI without a second token. (Not so: see ADR 0028.)
 - Negative: merging **this** step starts B5 and tags java-pipeline 0.20.0 by itself. Set `FACTORY_PAUSED=true`
   first to hold the queue (it doesn't hold release tags).
 - Negative: a dispatched CI run tests the branch head, not the merge with `main` that a `pull_request` run tests.

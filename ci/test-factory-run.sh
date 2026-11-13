@@ -47,7 +47,6 @@ cat > "$work/bin/gh" <<'SH'
 #!/usr/bin/env bash
 echo "$*" >> "$FAKE_GH/calls"
 case "$*" in # chaining (ADR 0026): dispatches, the issue itself, its labels, the pull request of a commit
-  *"/actions/workflows/ci.yml/dispatches "*) [[ ! -f "$FAKE_GH/ci-refused" ]] || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }; exit 0 ;;
   *"/actions/workflows/factory-feature.yml/dispatches "*) [[ ! -f "$FAKE_GH/dispatch-refused" ]] || exit 1; exit 0 ;;
   *"/commits/"*"/pulls") cat "$FAKE_GH/pulls.json" 2>/dev/null || echo '[]'; exit 0 ;;
   *"/issues/5/labels "*) exit 0 ;;
@@ -233,16 +232,13 @@ check "the pull request targets main from the issue's branch, titled after the s
   grep -qE 'repos/acme/demo/pulls -f title=feat: Greet a customer \(#5\) -f head=factory/issue-5 -f base=main' "$FAKE_GH/calls"
 check "the pull request body carries the report and closes the issue" \
   grep -qzE 'What was built.*Closes #5' "$work/state-r/pr-body.md"
-check "publish starts CI on the branch (GitHub starts none on a token-opened pull request)" \
-  grep -qE '^api --method POST repos/acme/demo/actions/workflows/ci\.yml/dispatches -f ref=factory/issue-5$' "$FAKE_GH/calls"
-check "the issue is told that CI was started" \
-  grep -qE 'issues/5/comments .*pull/7 is ready for review\. CI was started on the branch' "$FAKE_GH/calls"
-fresh; touch "$FAKE_GH/ci-refused"; expect pass "publish still succeeds when CI can't be started" $FULL
-check "(and the issue is told to close and reopen the pull request)" \
-  grep -qE 'issues/5/comments .*CI could not be started .*close and reopen' "$FAKE_GH/calls"
-fresh; FACTORY_PR_TOKEN_SET=true expect pass "publish with FACTORY_PR_TOKEN" $FULL
-check "with FACTORY_PR_TOKEN the pull request starts CI itself: no dispatch, no note" \
-  bash -c '! grep -qE "ci\.yml/dispatches|CI was started|CI could not" "$FAKE_GH/calls"'
+check "publish dispatches no CI (a dispatched run doesn't count for the pull request's required checks)" \
+  bash -c '! grep -q "ci\.yml/dispatches" "$FAKE_GH/calls"'
+check "opened with the workflow's own token, the issue is told to close and reopen the pull request" \
+  grep -qE 'issues/5/comments .*pull/7 is ready for review\. CI does not start on it by itself: close and reopen' "$FAKE_GH/calls"
+fresh; FACTORY_PR_STARTS_CI=true expect pass "publish as the factory's App (or with FACTORY_PR_TOKEN)" $FULL
+check "opened as the App the pull request starts CI itself: no note" \
+  bash -c '! grep -qE "ci\.yml/dispatches|close and reopen" "$FAKE_GH/calls"'
 fresh; touch "$FAKE_GH/pr-refused"; expect fail "a pull request GitHub refuses fails publish" $FULL
 check "(with GitHub's reason and the setting that fixes it)" \
   grep -q "GitHub refused the pull request: .*not permitted to create or approve pull requests.*Allow GitHub Actions to create" "$work/state-r/failure"
