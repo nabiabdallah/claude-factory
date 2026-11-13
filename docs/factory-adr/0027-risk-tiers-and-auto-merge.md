@@ -68,6 +68,11 @@ classified other PRs or merged anything.
   the sha pin, and the weekly digest of auto-merges (B7).
 - Negative: the reviewer is a model reading untrusted text. Its power is one verdict on a PR that was low by
   paths, and the merge job still demands green required checks.
+- Negative: CodeQL flags the review job (`actions/untrusted-checkout`): it checks out the PR's head in a job that
+  holds the Claude credential. Accepted, because the branch is in this repository, the PR is low by its paths
+  right then, no step runs anything from the checkout, and the reviewer starts in an empty directory with the
+  checkout as an extra directory and user settings only, so the PR's `.claude/`, `CLAUDE.md` and `.mcp.json` are
+  never loaded. The alert is dismissed by the owner, not silenced in the workflow.
 - Negative: tests and docs under paths with sensitive words (for example a test of the auth filter) are high.
   That's deliberate over-caution; the lists are widened or narrowed only by the owner's merge of this script.
 - Negative: ROADMAP.md is high although it is a doc: it starts the next step when merged (ADR 0026).

@@ -154,7 +154,9 @@ fresh docs/a.md; review approve
 args="$(cat "$FAKE_GH/agent-args")"
 [[ "$args" == *'--allowedTools Read Grep Glob'* && "$args" != *bypassPermissions* ]] && ok "review: read-only tools, no bypass" || bad "review: tools are not read-only: $args"
 [[ "$args" == *"name: code-reviewer"* && "$args" == *"VERDICT: APPROVE"* ]] && ok "review: the code-reviewer brief and the verdict line are in the prompt" || bad "review: prompt incomplete"
-[[ "$(cat "$FAKE_GH/agent-cwd")" == "$pr" ]] && ok "review: runs in the PR checkout" || bad "review: wrong cwd"
+cwd="$(cat "$FAKE_GH/agent-cwd")"
+[[ "$cwd" != "$pr"* && -z "$(ls -A "$cwd")" ]] && ok "review: starts in an empty directory, not the PR checkout" || bad "review: wrong cwd $cwd"
+[[ "$args" == *"--add-dir $pr --setting-sources user --strict-mcp-config"* ]] && ok "review: the checkout is data only (no project settings, hooks or MCP servers)" || bad "review: the PR's settings could load: $args"
 grep -q 'APPROVE' "$work/state/review.md" && ok "review: review.md written" || bad "review: no review.md"
 env -u FACTORY_AGENT_CMD -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY SHA="$real_sha" "$script" review >/dev/null 2>&1 && bad "review: ran with no credential" || ok "review: no credential, no run"
 
