@@ -39,6 +39,8 @@ case "$*" in
     elif [[ -f "$FAKE_GH/api-down" ]]; then echo "gh: Server Error (HTTP 500)" >&2; exit 1
     else echo "gh: Not Found (HTTP 404)" >&2; exit 1; fi ;;
   "api repos/acme/"*" --jq .id") echo 777 ;;
+  "api repos/acme/demo/contents/.github/workflows/factory-feature.yml --jq .name") [[ ! -f "$FAKE_GH/not-a-service" ]] || exit 1; echo factory-feature.yml ;;
+  "api --paginate installation/repositories --jq .repositories[].full_name") echo "token=$GH_TOKEN" >> "$log"; echo acme/factory; [[ ! -f "$FAKE_GH/app-installed" ]] || echo acme/demo ;;
   "api --method POST user/repos "*) [[ -f "$FAKE_GH/create-fails" ]] && exit 1; echo acme/x ;;
   "secret set "*) printf 'STDIN[%s]\n' "$(cat)" >> "$log" ;;
   "label create "*) ;;
@@ -93,22 +95,56 @@ git --git-dir="$FACTORY_PUSH_URL" rev-parse -q --verify refs/heads/main >/dev/nu
 fresh; run scaffold; touch "$FAKE_GH/create-fails"; expect_fail "create stops when GitHub refuses" "could not create" run create
 
 # --- configure
-cfg() { PACKAGES_TOKEN=pkg-SECRET CLAUDE_TOKEN=claude-SECRET APP_INSTALLATION_ID=55 run configure; }
+cfg() { PACKAGES_TOKEN=pkg-SECRET CLAUDE_TOKEN=claude-SECRET APP_INSTALLATION_ID=55 APP_KEY=key-SECRET APP_CLIENT_ID=Iv23client run configure; }
 fresh; expect_ok "configure sets everything" cfg
 c="$FAKE_GH/calls"
 [[ $(grep -c '^secret set FACTORY_PACKAGES_TOKEN --repo acme/demo$' "$c") == 1 && $(grep -c '^secret set FACTORY_PACKAGES_TOKEN --app dependabot --repo acme/demo$' "$c") == 1 \
   && $(grep -c '^secret set CLAUDE_CODE_OAUTH_TOKEN --repo acme/demo$' "$c") == 1 ]] && ok "three secrets set" || bad "secrets: $(grep 'secret set' "$c")"
 [[ $(grep -c '^STDIN\[pkg-SECRET\]$' "$c") == 2 && $(grep -c '^STDIN\[claude-SECRET\]$' "$c") == 1 ]] && ok "secret values go on stdin" || bad "secret stdin"
-! grep -qE 'pkg-SECRET|claude-SECRET' "$work/out" && ok "no secret value is printed" || bad "a secret value was printed"
-! grep -E 'pkg-SECRET|claude-SECRET' "$c" | grep -qv '^STDIN' && ok "no secret value on a command line" || bad "secret on a command line"
+! grep -qE 'pkg-SECRET|claude-SECRET|key-SECRET' "$work/out" && ok "no secret value is printed" || bad "a secret value was printed"
+! grep -E 'pkg-SECRET|claude-SECRET|key-SECRET' "$c" | grep -qv '^STDIN' && ok "no secret value on a command line" || bad "secret on a command line"
+[[ $(grep -c '^secret set FACTORY_APP_KEY --repo acme/demo$' "$c") == 1 && $(grep -c '^STDIN\[key-SECRET\]$' "$c") == 1 \
+  && $(grep -c '^secret set FACTORY_APP_CLIENT_ID --repo acme/demo$' "$c") == 1 && $(grep -c '^STDIN\[Iv23client\]$' "$c") == 1 ]] \
+  && ok "the service gets the App's key and client id, on stdin (ADR 0028)" || bad "App key: $(grep 'FACTORY_APP' "$c")"
+[[ "$(grep -n 'user/installations/55' "$c" | cut -d: -f1)" -lt "$(grep -n 'secret set FACTORY_APP_KEY' "$c" | cut -d: -f1)" ]] \
+  && ok "the key is set only after the repo joined the installation" || bad "the key was set before the installation"
 for l in factory:spec factory:build risk:high; do grep -q "^label create $l --repo acme/demo " "$c" && ok "label $l" || bad "no label $l"; done
 grep -qx 'api --method PUT user/installations/55/repositories/777' "$c" && ok "the App gets the repo" || bad "no App install call"
 grep -q 'repos/acme/demo/rulesets' "$c" && ok "protect-repo.sh ran" || bad "protect-repo.sh did not run"
 fresh; touch "$FAKE_GH/app-refuses"; expect_ok "configure finishes when the App can't be added" cfg
 grep -q 'repos/acme/demo/rulesets' "$FAKE_GH/calls" && ok "guardrails applied even though the App was refused" || bad "no guardrails when the App was refused"
-grep -q '::warning::could not add acme/demo' "$work/out" && grep -qF 'settings/installations/55' "$work/out" && ok "a refused App is a warning with the fix" || bad "no warning for the refused App"
-fresh; PACKAGES_TOKEN=x CLAUDE_TOKEN=y APP_INSTALLATION_ID='5;x' expect_fail "configure refuses a malformed installation id" "not a number" run configure
-fresh; PACKAGES_TOKEN= CLAUDE_TOKEN=y APP_INSTALLATION_ID=5 expect_fail "configure needs the packages token" "PACKAGES_TOKEN is not set" run configure
+grep -q '::warning::could not add acme/demo' "$work/out" && grep -qF 'settings/installations/55' "$work/out" && grep -qF 'Service app' "$work/out" && ok "a refused App is a warning with the fix" || bad "no warning for the refused App"
+! grep -q 'secret set FACTORY_APP' "$FAKE_GH/calls" && ok "a service the App is not on gets no App key (its publish job would fail)" || bad "the key was set without the installation"
+fresh; PACKAGES_TOKEN=x CLAUDE_TOKEN=y APP_INSTALLATION_ID=5 APP_CLIENT_ID=c APP_KEY= expect_fail "configure needs the App's key" "APP_KEY is not set" run configure
+fresh; PACKAGES_TOKEN=x CLAUDE_TOKEN=y APP_KEY=k APP_CLIENT_ID=c APP_INSTALLATION_ID='5;x' expect_fail "configure refuses a malformed installation id" "not a number" run configure
+fresh; PACKAGES_TOKEN= CLAUDE_TOKEN=y APP_KEY=k APP_CLIENT_ID=c APP_INSTALLATION_ID=5 expect_fail "configure needs the packages token" "PACKAGES_TOKEN is not set" run configure
+
+# --- app (an existing service gets the App, ADR 0028)
+giveapp() { APP_INSTALLATION_ID=55 APP_KEY=key-SECRET APP_CLIENT_ID=Iv23client APP_TOKEN=app-token run app; }
+appkey() { grep -q '^secret set FACTORY_APP_KEY --repo acme/demo$' "$FAKE_GH/calls"; }
+fresh; touch "$FAKE_GH/exists"; expect_ok "app: an existing service joins the installation and gets the key" giveapp
+appkey && grep -qx 'api --method PUT user/installations/55/repositories/777' "$FAKE_GH/calls" && ok "app: installation, then the key" || bad "app: $(cat "$FAKE_GH/calls")"
+! grep -q 'key-SECRET' "$work/out" && ! grep 'key-SECRET' "$FAKE_GH/calls" | grep -qv '^STDIN' && ok "app: the key is neither printed nor on a command line" || bad "app: the key leaked"
+! grep -qE 'rulesets|label create|FACTORY_PACKAGES_TOKEN|CLAUDE_CODE' "$FAKE_GH/calls" && ok "app: touches nothing else in the service" || bad "app: did more than the App"
+fresh; touch "$FAKE_GH/exists" "$FAKE_GH/app-refuses" "$FAKE_GH/app-installed"; expect_ok "app: the owner added the repo by hand, the admin token is refused: still gets the key" giveapp
+appkey && grep -qx 'token=app-token' "$FAKE_GH/calls" && ok "app: membership is read with the App's token" || bad "app: no key for a repo added by hand"
+fresh; touch "$FAKE_GH/exists" "$FAKE_GH/app-refuses"; expect_fail "app: not in the installation and can't be added" "did not get the key" giveapp
+! appkey && grep -qF 'settings/installations/55' "$work/out" && ok "app: no key without the installation, and the link to add it" || bad "app: key set without the installation"
+fresh; expect_fail "app: refuses a repo that doesn't exist" "does not exist" giveapp
+fresh; touch "$FAKE_GH/exists" "$FAKE_GH/not-a-service"; expect_fail "app: refuses a repo that isn't a factory service" "not a service" giveapp
+for r in claude-factory payments-service; do fresh; touch "$FAKE_GH/exists"; NAME="$r" expect_fail "app: refuses $r" "reserved" giveapp; ! appkey && ok "app: $r gets no key" || bad "app: $r got the key"; done
+fresh; touch "$FAKE_GH/exists"; echo mallory > "$FAKE_GH/login"; expect_fail "app: refuses another account's token" "belongs to" giveapp
+
+# --- workflows: the App's key goes to the token action and, as APP_KEY, to the provisioning script only
+for wf in .github/workflows/new-service.yml .github/workflows/service-app.yml; do
+  odd="$(grep -n 'secrets[.]FACTORY_APP_KEY' "$wf" | grep -vE 'private-key: [$][{][{] secrets[.]FACTORY_APP_KEY [}][}]$|^[0-9]+:          APP_KEY: [$][{][{] secrets[.]FACTORY_APP_KEY [}][}]$' || true)"
+  [[ -z "$odd" ]] && ok "$wf: the key only as private-key and APP_KEY" || bad "$wf: FACTORY_APP_KEY used elsewhere: $odd"
+  [[ "$(grep -c 'APP_KEY: [$][{][{]' "$wf")" == 1 ]] && sed -n '/APP_KEY: [$][{][{]/,$p' "$wf" | grep -q . \
+    && grep -B12 'APP_KEY: [$][{][{]' "$wf" | grep -qE 'run: \.github/scripts/new-service\.sh (configure|app)$' \
+    && ok "$wf: APP_KEY goes to one new-service.sh step" || bad "$wf: APP_KEY reaches another step"
+  grep -q '^    environment: provisioning$' "$wf" && grep -q 'refs/heads/main' "$wf" && ok "$wf: provisioning environment, main only" || bad "$wf: not tied to main"
+  ! grep -qE '^\s+run:.*[$][{][{]' "$wf" && ok "$wf: no run command interpolates an expression" || bad "$wf: a run command interpolates an expression"
+done
 
 [[ $fails -eq 0 ]] && echo "new-service tests: OK" || echo "new-service tests: FAILED"
 exit $fails

@@ -1,0 +1,56 @@
+name: Service app
+
+# Gives an existing service the factory's App (factory ADR 0028): adds the repo to the App's installation and
+# copies the App's key and client id into its secrets, so pull requests opened by its runner start CI. New services
+# get this from new-service.yml. If the admin token may not change the installation, add the repo by hand first
+# (the run's warning has the link) and run this again.
+# Needs: the `provisioning` environment (FACTORY_ADMIN_TOKEN, main only), FACTORY_APP_KEY, FACTORY_APP_CLIENT_ID.
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "Service repository name (e.g. demo-service)"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: new-service
+  cancel-in-progress: false
+
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only main can use this environment, so only code the owner merged ever holds the admin token.
+    environment: provisioning
+    steps:
+      - name: Refuse anything but main
+        env:
+          REF: ${{ github.ref }}
+        run: '[[ "$REF" == refs/heads/main ]] || { echo "::error::run from main only"; exit 1; }'
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # For the whole installation, so the script can see whether the service is in it already.
+      - name: Mint an App token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.FACTORY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FACTORY_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Add the service to the App and give it the App's key
+        run: .github/scripts/new-service.sh app
+        env:
+          OWNER: ${{ github.repository_owner }}
+          NAME: ${{ inputs.name }}
+          GH_TOKEN: ${{ secrets.FACTORY_ADMIN_TOKEN }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          APP_INSTALLATION_ID: ${{ steps.app.outputs.installation-id }}
+          APP_KEY: ${{ secrets.FACTORY_APP_KEY }}
+          APP_CLIENT_ID: ${{ vars.FACTORY_APP_CLIENT_ID }}

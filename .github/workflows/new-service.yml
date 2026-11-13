@@ -5,7 +5,8 @@ name: New service
 # Needs: the `provisioning` environment (deployment branches: main only) holding the secret FACTORY_ADMIN_TOKEN,
 # a fine-grained token of the owner's (all repositories: Administration, Contents, Secrets, Dependabot secrets,
 # Issues, Workflows read and write; account: GitHub App installation repository access); the repository secrets
-# FACTORY_PACKAGES_TOKEN and CLAUDE_CODE_OAUTH_TOKEN, copied into the new repo; the App's FACTORY_APP_* settings.
+# FACTORY_PACKAGES_TOKEN and CLAUDE_CODE_OAUTH_TOKEN, copied into the new repo; the App's FACTORY_APP_* settings,
+# whose key and client id are copied too once the repo is in the App's installation (ADR 0028).
 on:
   workflow_dispatch:
     inputs:
@@ -109,3 +110,6 @@ jobs:
           PACKAGES_TOKEN: ${{ secrets.FACTORY_PACKAGES_TOKEN }}
           CLAUDE_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           APP_INSTALLATION_ID: ${{ steps.app.outputs.installation-id }}
+          # The App's key and client id are copied into the service, so its runner opens PRs as the App (ADR 0028).
+          APP_KEY: ${{ secrets.FACTORY_APP_KEY }}
+          APP_CLIENT_ID: ${{ vars.FACTORY_APP_CLIENT_ID }}

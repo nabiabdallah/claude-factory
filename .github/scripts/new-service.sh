@@ -5,6 +5,8 @@
 #   scaffold   new-project.sh from the latest java-pipeline release (verify green, first commit)
 #   create     create the public repo and push main (the admin token)
 #   configure  Actions and Dependabot secrets, labels, the factory's App, protect-repo.sh
+# and, for a service that exists already, .github/workflows/service-app.yml calls:
+#   app        add the repo to the App's installation and give it the App's key (ADR 0028)
 # The admin token comes only from the `provisioning` environment, which only `main` can use. Secret values arrive
 # in the environment and go to `gh` on stdin; nothing here prints them. State lives in $FACTORY_STATE.
 # Tested with a fake `gh` and a stand-in new-project.sh by ci/test-new-service.sh.
@@ -19,6 +21,34 @@ summary() { echo "$*"; [[ -z "${GITHUB_STEP_SUMMARY:-}" ]] || echo "$*" >> "$GIT
 
 # Repos provisioning never touches: the factory itself and the validation service.
 reserved='^(claude-factory|payments-service)$'
+
+# Gives $repo the factory's App (ADR 0028): the repo joins the App's installation, then gets the App's key and client
+# id as secrets, so its runner opens pull requests as the App and they start CI. The key is set only once the App
+# is known to be on the repo: a key without the installation would fail every publish job. Sets $app (for the
+# summary) and returns 1 when the App is not on the repo.
+give_app() {
+  need APP_INSTALLATION_ID APP_KEY APP_CLIENT_ID
+  [[ "$APP_INSTALLATION_ID" =~ ^[0-9]+$ ]] || die "the App installation id is not a number"
+  local repo_id by_hand="https://github.com/settings/installations/$APP_INSTALLATION_ID"
+  repo_id="$(gh api "repos/$repo" --jq .id)"
+  [[ "$repo_id" =~ ^[0-9]+$ ]] || die "could not read the id of $repo"
+  # Adding a repo to the App's installation may need a classic token (GitHub's docs disagree). If the admin token
+  # is refused, the owner may have added the repo by hand: an App token for the whole installation can tell.
+  if ! gh api --method PUT "user/installations/$APP_INSTALLATION_ID/repositories/$repo_id" >/dev/null 2>"$state/app.err"; then
+    if [[ -z "${APP_TOKEN:-}" ]] || ! GH_TOKEN="$APP_TOKEN" gh api --paginate installation/repositories \
+      --jq '.repositories[].full_name' 2>/dev/null | grep -qxF "$repo"; then
+      echo "::warning::could not add $repo to the factory's App ($(tr -d '\n' < "$state/app.err")). Add it by hand at $by_hand, then run the \"Service app\" workflow with its name. Until then its runner's pull requests need a close and reopen to start CI."
+      app="NOT the App (add it by hand: $by_hand, then run the Service app workflow)"
+      return 1
+    fi
+  fi
+  printf '%s' "$APP_KEY" | gh secret set FACTORY_APP_KEY --repo "$repo" >/dev/null \
+    || die "could not set the secret FACTORY_APP_KEY"
+  # A secret, not a variable: the admin token has no Variables permission, and the runner reads either.
+  printf '%s' "$APP_CLIENT_ID" | gh secret set FACTORY_APP_CLIENT_ID --repo "$repo" >/dev/null \
+    || die "could not set the secret FACTORY_APP_CLIENT_ID"
+  app="the factory's App and its key"
+}
 
 phase="${1:-}"
 case "$phase" in
@@ -67,7 +97,7 @@ case "$phase" in
     ;;
 
   configure)
-    need OWNER NAME GH_TOKEN PACKAGES_TOKEN CLAUDE_TOKEN APP_INSTALLATION_ID
+    need OWNER NAME GH_TOKEN PACKAGES_TOKEN CLAUDE_TOKEN APP_INSTALLATION_ID APP_KEY APP_CLIENT_ID
     repo="$OWNER/$NAME"
     [[ "$APP_INSTALLATION_ID" =~ ^[0-9]+$ ]] || die "the App installation id is not a number"
     printf '%s' "$PACKAGES_TOKEN" | gh secret set FACTORY_PACKAGES_TOKEN --repo "$repo" >/dev/null \
@@ -85,18 +115,26 @@ factory:build|0E8A16|Build this issue's approved spec
 risk:high|B60205|Only the owner merges (ADR 0020)
 LABELS
     "$here/../../ci/protect-repo.sh" "$repo" service || die "protect-repo.sh failed on $repo"
-    # Adding a repo to the App's installation may need a classic token (GitHub's docs disagree). Services don't use
-    # the App yet (their runner still uses GITHUB_TOKEN), so a refusal is a warning with the one click that fixes it.
-    repo_id="$(gh api "repos/$repo" --jq .id)"
-    [[ "$repo_id" =~ ^[0-9]+$ ]] || die "could not read the id of $repo"
-    if gh api --method PUT "user/installations/$APP_INSTALLATION_ID/repositories/$repo_id" >/dev/null 2>"$state/app.err"; then
-      app="the factory's App"
-    else
-      echo "::warning::could not add $repo to the factory's App ($(tr -d '\n' < "$state/app.err")). Add it by hand: https://github.com/settings/installations/$APP_INSTALLATION_ID"
-      app="NOT the App (add it by hand: https://github.com/settings/installations/$APP_INSTALLATION_ID)"
-    fi
+    give_app || true
     summary "Configured $repo: secrets, labels, guardrails, $app"
     ;;
 
-  *) echo "usage: new-service.sh check|scaffold|create|configure" >&2; exit 2 ;;
+  app)
+    need OWNER NAME GH_TOKEN
+    [[ "$OWNER" =~ ^[A-Za-z0-9-]+$ ]] || die "owner '$OWNER' is malformed"
+    [[ "$NAME" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ && ${#NAME} -le 40 ]] || die "name must be kebab-case, at most 40 characters"
+    [[ ! "$NAME" =~ $reserved ]] || die "$NAME is reserved: provisioning never touches it"
+    login="$(gh api user --jq .login 2>/dev/null)" \
+      || die "the admin token doesn't work (FACTORY_ADMIN_TOKEN in the provisioning environment: expired, revoked or mistyped?)"
+    [[ "$login" == "$OWNER" ]] || die "the admin token belongs to '$login', not $OWNER"
+    repo="$OWNER/$NAME"
+    gh api "repos/$repo" --jq .full_name >/dev/null 2>&1 || die "$repo does not exist (or the admin token can't see it)"
+    # Only a service of this factory: its runner is what uses the key.
+    gh api "repos/$repo/contents/.github/workflows/factory-feature.yml" --jq .name >/dev/null 2>&1 \
+      || die "$repo has no factory-feature.yml: it is not a service of this factory"
+    give_app || die "the App is not on $repo yet, so it did not get the key (see the warning above)"
+    summary "$repo now has $app: its runner's pull requests start CI (from java-pipeline 0.20.1)"
+    ;;
+
+  *) echo "usage: new-service.sh check|scaffold|create|configure|app" >&2; exit 2 ;;
 esac
