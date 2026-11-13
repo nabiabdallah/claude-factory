@@ -1,0 +1,40 @@
+name: Factory chain
+
+# Starts the next queued step without a "go" (factory ADR 0026): when a merge changes docs/ROADMAP.md (every
+# step's PR ticks its row there), once a day, or by hand. It only dispatches factory-step.yml, and only when
+# nothing is in the way: .github/scripts/factory-chain.sh says in the job summary what it did or why not.
+# The repository variable FACTORY_PAUSED=true stops it.
+on:
+  push:
+    branches: [main]
+    paths: ['docs/ROADMAP.md']
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: factory-chain
+  cancel-in-progress: false
+
+jobs:
+  next-step:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read # is a step PR open?
+      actions: write # read the step runs, dispatch factory-step.yml (GITHUB_TOKEN may start a workflow_dispatch)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Start the next queued step, if nothing is in the way
+        run: GITHUB_SHA="$(git rev-parse HEAD)" .github/scripts/factory-chain.sh next-step
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FACTORY_PAUSED: ${{ vars.FACTORY_PAUSED }}

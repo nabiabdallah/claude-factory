@@ -66,6 +66,11 @@ jobs:
       - name: Factory step runner (stand-in agent, fake gh)
         run: ci/test-factory-step.sh
 
+      # Chaining and releases (factory ADR 0026): when the next step is dispatched and when it is held, which
+      # version bumps get a tag; fake gh.
+      - name: Factory chain and release tags (fake gh)
+        run: ci/test-factory-chain.sh
+
       # Every workflow loads on GitHub (factory ADR 0025): actionlint, pinned; it must also reject a known-bad file.
       - name: Workflow lint (actionlint)
         run: ci/lint-workflows.sh

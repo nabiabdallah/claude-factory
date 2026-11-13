@@ -1,6 +1,7 @@
 name: Publish factory-parent
 
-# Release: bump <version> in parents/factory-parent/pom.xml, commit, then push a matching tag:
+# Release: bump <version> in parents/factory-parent/pom.xml and merge. release-tag.yml then creates the tag
+# factory-parent-vX.Y.Z on the merge commit (factory ADR 0026), which starts this workflow. By hand, if needed:
 #   git tag factory-parent-v1.0.0 && git push origin factory-parent-v1.0.0
 on:
   push:
