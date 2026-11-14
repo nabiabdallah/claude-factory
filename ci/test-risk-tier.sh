@@ -15,8 +15,11 @@ rt() { "$script" "$@"; }
 
 # --- classify: every path class -------------------------------------------------------------------------------
 tier() { # tier <author> <title> <paths...> -> the first output line
-  local a="$1" t="$2"; shift 2
-  printf '%s\n' "$@" | PR_AUTHOR="$a" PR_TITLE="$t" rt classify | head -n 1
+  local a="$1" t="$2" out; shift 2
+  # Not `rt classify | head -n 1`: head leaves after the tier, and the reasons still being written then kill
+  # classify with SIGPIPE (exit 141 under pipefail), now and then.
+  out="$(printf '%s\n' "$@" | PR_AUTHOR="$a" PR_TITLE="$t" rt classify)"
+  head -n 1 <<<"$out"
 }
 expect() { # expect <low|high> <description> <author> <title> <paths...>
   local want="$1" what="$2" a="$3" t="$4"; shift 4
