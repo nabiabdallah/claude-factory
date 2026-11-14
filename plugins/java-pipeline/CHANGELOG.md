@@ -5,6 +5,16 @@ All notable changes to the plugin, newest first ([Keep a Changelog](https://keep
 Each version is tagged `java-pipeline-vX.Y.Z`; projects pin the tag in `.claude/settings.json` (`ref`).
 Decisions are in `docs/factory-adr/`.
 
+## [0.21.1] - 2026-11-14
+
+- Fixed: the independent review never ran. Its prompt began with the code-reviewer file's `---` front matter, and
+  the Claude CLI read that as an unknown option and exited at once (market-rates PR #7, the 0.21.0 acceptance
+  run). The prompt is now the file's body, without the front matter, behind a plain first line.
+- In claude-factory: the factory's own auto-merge reviewer had the same defect; it had not yet reached a review.
+
+**Upgrading:** copy `risk-tier.sh` (`.github/scripts/`) from `templates/skeleton/.github/` and set `ref` to
+`java-pipeline-v0.21.1`. Nothing else changes.
+
 ## [0.21.0] - 2026-11-14
 
 - Every pull request from a branch of the repository gets an independent review (ADR 0033). When CI passes, the

@@ -158,7 +158,13 @@ case "$phase" in
     git -C "$PR_DIR" diff "origin/main...$SHA" > "$diff_file" || die "could not diff $SHA against origin/main"
     [[ -s "$diff_file" ]] || die "could not produce the diff of $SHA"
     (( $(wc -c < "$diff_file") <= 400000 )) || { say "Not auto-merged: the diff is over 400000 bytes, too big for an unattended review"; output verdict none; output sha "$SHA"; exit 0; }
-    prompt="$(cat "$agent_file")
+    # The brief is the agent file's body without its front matter (name, tools, model: for Claude Code's agent
+    # loader, not instructions), behind a plain first line: the CLI reads a prompt that starts with "-" as an option.
+    brief="$(awk 'NR == 1 && /^---[[:space:]]*$/ { fm = 1; next } fm && /^---[[:space:]]*$/ { fm = 0; next } !fm' "$agent_file")"
+    [[ -n "${brief//[[:space:]]/}" ]] || die "the code-reviewer definition at $agent_file is empty"
+    prompt="Instructions for the independent code reviewer (the code-reviewer agent):
+
+$brief
 
 ---
 You are the independent reviewer of a pull request that the factory's classifier rated risk:low (docs, tests or a

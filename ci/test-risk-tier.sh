@@ -90,6 +90,9 @@ GH
 cat > "$work/bin/agent" <<'AG'
 #!/usr/bin/env bash
 printf '%s\n' "$*" > "$FAKE_GH/agent-args"; pwd > "$FAKE_GH/agent-cwd"
+# As the real CLI does: the value after --print that starts with "-" is read as an option, and the run fails.
+# (An agent file begins with "---" front matter; the java-pipeline 0.21.0 review died on exactly that.)
+[[ "${1:-}" == --print && "${2:-}" != -* ]] || { echo "error: unknown option '${2:0:20}'" >&2; exit 1; }
 case "$SCENARIO" in
   approve)  text=$'Read the diff. Nothing to fix.\n\nVERDICT: APPROVE' ;;
   reject)   text=$'MUST FIX: a broken link.\n\nVERDICT: REQUEST CHANGES' ;;
@@ -156,7 +159,7 @@ fresh docs/a.md; SHA="$other" SCENARIO=approve rt review >/dev/null 2>&1 && bad 
 fresh docs/a.md; review approve
 args="$(cat "$FAKE_GH/agent-args")"
 [[ "$args" == *'--allowedTools Read Grep Glob'* && "$args" != *bypassPermissions* ]] && ok "review: read-only tools, no bypass" || bad "review: tools are not read-only: $args"
-[[ "$args" == *"name: code-reviewer"* && "$args" == *"VERDICT: APPROVE"* ]] && ok "review: the code-reviewer brief and the verdict line are in the prompt" || bad "review: prompt incomplete"
+[[ "$args" == *"You review the change set"* && "$args" != *"name: code-reviewer"* && "$args" == *"VERDICT: APPROVE"* ]] && ok "review: the code-reviewer brief and the verdict line are in the prompt" || bad "review: prompt incomplete"
 cwd="$(cat "$FAKE_GH/agent-cwd")"
 [[ "$cwd" != "$pr"* && -z "$(ls -A "$cwd")" ]] && ok "review: starts in an empty directory, not the PR checkout" || bad "review: wrong cwd $cwd"
 [[ "$args" == *"--add-dir $pr --setting-sources user --strict-mcp-config"* ]] && ok "review: the checkout is data only (no project settings, hooks or MCP servers)" || bad "review: the PR's settings could load: $args"
