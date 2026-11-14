@@ -1,0 +1,38 @@
+name: Factory maintenance
+
+# The weekly digest of the factory's decision inbox (factory ADR 0032): runs and usage from the ledger, auto-merges,
+# what is waiting, Dependabot triage with a recommendation each, expiring `.trivyignore.yaml` entries and the
+# yearly CLAUDE_CODE_OAUTH_TOKEN. It comments on the pinned "Factory inbox" issue; it merges, closes and pushes
+# nothing. Variable: CLAUDE_TOKEN_EXPIRES (YYYY-MM-DD, when the token's year ends).
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: factory-maintenance
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write # the inbox issue and its comments
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Post the weekly digest to the factory inbox
+        run: .github/scripts/factory-inbox.sh digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLAUDE_TOKEN_EXPIRES: ${{ vars.CLAUDE_TOKEN_EXPIRES }}
+          FACTORY_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
