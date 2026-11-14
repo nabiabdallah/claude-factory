@@ -135,6 +135,12 @@ one was pushed, then remove and re-add the label.
 **Check:** the issue gets "Factory run finished: … is ready for review", and the PR's description maps each
 acceptance criterion to its tests. The run starts CI on the PR's branch itself.
 
+**Review and risk tiers** ([ADR 0033](factory-adr/0033-service-review-and-risk-tiers.md)): when CI passes on any
+pull request from a branch of the repo, `factory-review.yml` posts an independent review as a comment ("Independent
+review (advisory)", with a verdict). `risk-tier.yml` labels the PR `risk:low` or `risk:high`. A feature is always
+high: read the review and merge it yourself. A low one (docs, tests, a Dependabot minor bump) merges by itself on
+APPROVE with green checks. To retry a review: `gh workflow run factory-review.yml -f pr=<n>`.
+
 ## 8. Deploy
 
 Once per cluster ([ADR 0012](factory-adr/0012-deploy-safety.md), [ADR 0014](factory-adr/0014-observability-prometheus-otel.md)):

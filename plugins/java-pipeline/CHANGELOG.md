@@ -5,6 +5,29 @@ All notable changes to the plugin, newest first ([Keep a Changelog](https://keep
 Each version is tagged `java-pipeline-vX.Y.Z`; projects pin the tag in `.claude/settings.json` (`ref`).
 Decisions are in `docs/factory-adr/`.
 
+## [0.21.0] - 2026-11-14
+
+- Every pull request from a branch of the repository gets an independent review (ADR 0033). When CI passes, the
+  new `factory-review.yml` runs a fresh `code-reviewer` (the brief from the plugin release the project is pinned
+  to, read-only tools, the head checked out as data) on the final diff and posts the review on the pull request,
+  replacing its earlier one on each new head. It is advisory: on a `risk:high` pull request, which every feature
+  is, it merges nothing. You merge, with the review in front of you.
+- Risk tiers in services: the new `risk-tier.yml` labels each pull request `risk:low` (docs other than specs,
+  tests other than architecture tests, Dependabot patch and minor bumps other than factory-parent) or `risk:high`
+  (everything else, and any path it doesn't know).
+- A `risk:low` pull request merges by itself on an APPROVE, at the reviewed commit, once every required check of
+  `main` is green; as the factory's App when the repository has its key, else with the workflow's token.
+  `FACTORY_PAUSED=true` stops reviews and merges.
+- In claude-factory: provisioning creates the `risk:low` label too.
+
+**Upgrading:** copy `risk-tier.sh` (`.github/scripts/`), `risk-tier.yml` and `factory-review.yml`
+(`.github/workflows/`) from `templates/skeleton/.github/`, and set `ref` to `java-pipeline-v0.21.0`. Create the
+labels: `gh label create risk:low --color 0E8A16` and `gh label create risk:high --color B60205` (the workflow
+also creates them on first use). The workflow needs `CLAUDE_CODE_OAUTH_TOKEN`, which a factory-provisioned service
+has. GitHub's code scanning may flag the review job (`actions/untrusted-checkout`): it checks out the pull
+request's head in a job that holds the Claude credential; nothing from that checkout runs (ADR 0033). Your
+`ci.yml` must still be named `CI`. Nothing else changes.
+
 ## [0.20.1] - 2026-11-14
 
 - Fixed: pull requests opened by the runner did not get CI by themselves, despite 0.20.0's note. The CI run the
