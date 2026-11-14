@@ -29,6 +29,8 @@ cat > "$work/bin/gh" <<'SH'
 echo "$*" >> "$FAKE_GH/calls"
 case "$*" in
   "pr list "*) [[ ! -f "$FAKE_GH/pr-list-fails" ]] || exit 1; cat "$FAKE_GH/open-prs" 2>/dev/null || true ;;
+  "api -H Accept: application/vnd.github.raw repos/acme/factory/contents/runs.jsonl?ref=factory-ledger")
+    cat "$FAKE_GH/ledger" 2>/dev/null || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; } ;;
   "api repos/acme/factory/branches/"*) [[ -f "$FAKE_GH/branch-exists" ]] && echo branch || exit 1 ;;
   "api repos/acme/factory/actions/workflows/factory-step.yml/runs"*) cat "$FAKE_GH/last-run" 2>/dev/null || true ;;
   "api --method POST repos/acme/factory/actions/workflows/factory-step.yml/dispatches "*) ;;
@@ -65,6 +67,8 @@ grep -qx 'api --method POST repos/acme/factory/actions/workflows/factory-step.ym
   && ok "dispatches factory-step.yml on main for B4" || bad "dispatch call: $(grep dispatches "$FAKE_GH/calls")"
 fresh; FACTORY_PAUSED=true holds "holds while paused" "paused"
 [[ ! -s "$FAKE_GH/calls" ]] && ok "(and asks GitHub nothing)" || bad "paused but called gh: $(cat "$FAKE_GH/calls")"
+fresh; echo '{"step":"B6","outcome":"usage-limit","resumes_at":4102444800}' > "$FAKE_GH/ledger"; holds "holds while the usage limit is in force" "usage limit was hit"
+fresh; echo '{"step":"B6","outcome":"usage-limit","resumes_at":1000}' > "$FAKE_GH/ledger"; starts "starts again once the limit's reset time has passed"
 fresh; queue '| B4 (built, awaiting the owner) | Chaining | x | x |'; holds "holds when the queue has no runnable step" "no unfinished step"
 fresh; echo factory/step-b3 > "$FAKE_GH/open-prs"; holds "holds while a step PR is open" "one step at a time"
 fresh; echo feat/something > "$FAKE_GH/open-prs"; starts "another open PR doesn't hold the queue"

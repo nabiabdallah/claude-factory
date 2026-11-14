@@ -4,15 +4,20 @@
 #   agent job  (no GitHub token; the Claude credential only)
 #     resolve   which step (the input, or the first unfinished one), refuse while paused or while a step PR is open
 #     tools     install the pinned Claude Code CLI
-#     agent     run the step: "Read docs/ROADMAP.md and continue with <step>", headless
+#     agent     run the step: "Read docs/ROADMAP.md and continue with <step>", headless. A run that hit the
+#               subscription's usage limit ends as outcome `usage-limit` (not a failure): nothing is packed or
+#               published and dispatch pauses until the reset (the ledger's last record, read by resolve and paused)
 #     pack      everything committed, a report written; hand over a git bundle of the commits and the report
 #   publish job  (a fresh checkout of the base commit: nothing the agent touched runs here)
 #     gate      the bundle holds commits on top of the base; flags protected files (risk:high); refuses deleted tests
 #     publish   push the branch and open the pull request with the App's token
+#   ledger job (a fresh checkout of the base; runs after the other two, whatever they did; ADR 0030)
+#     ledger    append the run's outcome, duration and usage to runs.jsonl on the factory-ledger branch
 #   either job
 #     failed    say in the job summary which phase stopped the run and why
 # The agent job runs `agent`, `pack` and `failed` from a copy of this file taken before the agent starts, so a
 # step that changes the runner is packed by the runner it started with.
+# `paused` prints the reset time (epoch seconds) while the ledger says the usage limit is still in force, else nothing.
 # State lives in $FACTORY_STATE. Tested with a fake `gh` and a stand-in agent by ci/test-factory-step.sh.
 set -euo pipefail
 
@@ -35,9 +40,38 @@ protected_re='(^|/)\.github/|^(\.claude/|CLAUDE\.md$|ci/protect-repo\.sh$|ci/fac
 # owner). Only a bare id is runnable.
 queue() { sed -n 's/^| \([AB][0-9][0-9]*[a-z]\{0,1\}\) |.*/\1/p' docs/ROADMAP.md; }
 
+# The usage-limit pause (ADR 0030). The ledger (runs.jsonl on the factory-ledger branch) has one JSON record per
+# run; dispatch is paused while the *last* record is a usage-limit run whose `resumes_at` is still ahead. Prints
+# that time (epoch seconds), or nothing. No ledger yet (404) means not paused; any other failure to read it stops
+# the caller, because starting a run into a limit only spends usage.
+ledger_pause() {
+  local out
+  out="$(gh api -H 'Accept: application/vnd.github.raw' "repos/${GITHUB_REPOSITORY:?}/contents/runs.jsonl?ref=factory-ledger" 2>&1)" || {
+    grep -q 'HTTP 404' <<<"$out" && return 0
+    die "could not read the ledger: $out"
+  }
+  jq -Rrs --argjson now "${FACTORY_NOW:-$(date +%s)}" \
+    '[split("\n")[] | fromjson? | objects] | last // empty | select(.outcome == "usage-limit") | .resumes_at | numbers | select(. > $now)' \
+    <<<"$out" || die "the ledger is not readable JSON lines"
+}
+
+# Does the agent's result say the subscription's usage limit was hit? Only an error result counts, and only a short
+# one: a successful report may well discuss usage limits. Prints the reset time (epoch seconds), or now plus
+# FACTORY_LIMIT_PAUSE_HOURS (default 5) when the message gives none. The CLI's message is
+# "Claude AI usage limit reached|<epoch>"; newer ones say "hit your limit" with a local time, which is not parsed.
+usage_limit_reset() { # usage_limit_reset <exit status> <agent.json>
+  local msg epoch
+  msg="$(jq -r 'select(type == "object") | select(.is_error == true or $ARGS.named.status != "0") | .result | strings | select(length < 300)' \
+    --arg status "$1" "$2" 2>/dev/null)" || return 1
+  [[ "$msg" =~ [Uu]sage\ limit|[Hh]it\ your\ limit|[Ll]imit\ reached ]] || return 1
+  epoch="$(grep -oE '\|[0-9]{10}' <<<"$msg" | head -n 1 | tr -d '|' || true)"
+  [[ -n "$epoch" ]] || epoch=$(( $(date +%s) + ${FACTORY_LIMIT_PAUSE_HOURS:-5} * 3600 ))
+  echo "$epoch"
+}
+
 phase="${1:-}"
-[[ -n "$phase" ]] || { echo "usage: factory-step.sh queue|resolve|tools|agent|pack|gate|publish|failed" >&2; exit 2; }
-[[ "$phase" == failed || "$phase" == queue ]] || echo "$phase" > "$state/phase"
+[[ -n "$phase" ]] || { echo "usage: factory-step.sh queue|paused|resolve|tools|agent|pack|gate|publish|failed" >&2; exit 2; }
+[[ "$phase" == failed || "$phase" == queue || "$phase" == paused ]] || echo "$phase" > "$state/phase"
 
 # bash reads a script while it runs it, and a step may change this very file (B6 did, and bash went on reading
 # where the old file ended, in the middle of the new one). The braces make the rest one command, read whole before
@@ -48,9 +82,16 @@ case "$phase" in
     queue
     ;;
 
+  paused)
+    need GITHUB_REPOSITORY
+    ledger_pause
+    ;;
+
   resolve)
     need GITHUB_REPOSITORY
     [[ "${FACTORY_PAUSED:-}" != true ]] || die "the factory is paused (repository variable FACTORY_PAUSED=true)"
+    until="$(ledger_pause)"
+    [[ -z "$until" ]] || die "the subscription's usage limit was hit: dispatch is paused until $(date -u -d "@$until" '+%Y-%m-%d %H:%M UTC') (the ledger's last record)"
     runnable="$(queue)"
     [[ -n "$runnable" ]] || die "no unfinished step in the roadmap's queue"
     if [[ -n "${STEP:-}" ]]; then
@@ -93,6 +134,13 @@ case "$phase" in
       --output-format json > "$state/agent.json"
     status=$?
     set -e
+    if resumes="$(usage_limit_reset "$status" "$state/agent.json")"; then
+      echo usage-limit > "$state/outcome"; echo "$resumes" > "$state/resumes"
+      output outcome usage-limit; output resumes "$resumes"
+      msg="Step $step stopped at the subscription's usage limit (not a failure of the step). Nothing was packed or published; dispatch is paused until $(date -u -d "@$resumes" '+%Y-%m-%d %H:%M UTC')."
+      echo "factory-step: $msg"; [[ -z "${GITHUB_STEP_SUMMARY:-}" ]] || echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+      exit 0
+    fi
     [[ $status -eq 0 ]] || die "the agent stopped with exit code $status (see the agent-step artifact)"
     ;;
 
@@ -161,6 +209,56 @@ case "$phase" in
     echo "$pr_url" > "$state/pr-url"
     [[ -z "${GITHUB_STEP_SUMMARY:-}" ]] || echo "Step $step: $pr_url" >> "$GITHUB_STEP_SUMMARY"
     echo "factory-step: opened $pr_url"
+    ;;
+
+  ledger)
+    # Runs in its own job from a checkout of the base, whatever the other jobs did. STEP, OUTCOME and RESUMES come
+    # from the workflow (job results and outputs), not from the agent; only the usage numbers come from the agent's
+    # result (agent.json in FACTORY_HANDOFF, if any), and each is kept only if it is a number.
+    need GITHUB_REPOSITORY GH_TOKEN STEP OUTCOME
+    [[ "$STEP" =~ ^[AB][0-9]{1,2}[a-z]?$ ]] || die "unexpected step '$STEP'"
+    [[ "$OUTCOME" =~ ^(published|failed|usage-limit)$ ]] || die "unexpected outcome '$OUTCOME'"
+    [[ "${RESUMES:-}" =~ ^[0-9]*$ ]] || die "unexpected reset time"
+    [[ "$OUTCOME" != usage-limit || -n "${RESUMES:-}" ]] || die "a usage-limit record needs its reset time"
+    result='{}'
+    if [[ -f "${FACTORY_HANDOFF:-}/agent.json" ]]; then
+      result="$(jq -c 'select(type == "object")' "$FACTORY_HANDOFF/agent.json" 2>/dev/null || true)"
+      [[ -n "$result" ]] || result='{}'
+    fi
+    record="$(jq -cn --argjson r "$result" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg run "${GITHUB_RUN_ID:-}" \
+      --arg attempt "${GITHUB_RUN_ATTEMPT:-1}" --arg step "$STEP" --arg outcome "$OUTCOME" --arg resumes "${RESUMES:-}" \
+      '{ts: $ts, run: $run, attempt: ($attempt | tonumber? // 1), step: $step, outcome: $outcome,
+        duration_s: ((($r.duration_ms | numbers) // 0) / 1000 | round),
+        cost_usd: (($r.total_cost_usd | numbers) // 0),
+        turns: (($r.num_turns | numbers) // 0),
+        input_tokens: (($r.usage.input_tokens | numbers) // 0),
+        output_tokens: (($r.usage.output_tokens | numbers) // 0),
+        cache_read_tokens: (($r.usage.cache_read_input_tokens | numbers) // 0),
+        cache_creation_tokens: (($r.usage.cache_creation_input_tokens | numbers) // 0),
+        resumes_at: (if $resumes == "" then null else ($resumes | tonumber) end)}')" || die "could not build the ledger record"
+    url="${FACTORY_PUSH_URL:-https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY}"
+    # Append to the branch's runs.jsonl, creating the branch (an orphan, so it carries no code) the first time.
+    # Another writer may win the push: fetch again and retry.
+    for _ in 1 2 3 4 5; do
+      dir="$(mktemp -d "$state/ledger.XXXXXX")"
+      git -C "$dir" init -q
+      if git -C "$dir" fetch -q "$url" "refs/heads/factory-ledger" 2>/dev/null; then
+        git -C "$dir" checkout -q -B ledger FETCH_HEAD
+      else
+        git -C "$dir" checkout -q --orphan ledger
+      fi
+      echo "$record" >> "$dir/runs.jsonl"
+      git -C "$dir" add runs.jsonl
+      git -C "$dir" -c user.name="factory ledger" -c user.email="factory-ledger@users.noreply.github.com" \
+        commit -q -m "ledger: $STEP $OUTCOME (run ${GITHUB_RUN_ID:-local})"
+      if git -C "$dir" push -q "$url" "ledger:refs/heads/factory-ledger" 2>/dev/null; then
+        echo "factory-step: ledger: $record"
+        [[ -z "${GITHUB_STEP_SUMMARY:-}" ]] || echo "Ledger: step $STEP, $OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+        exit 0
+      fi
+      sleep "${FACTORY_LEDGER_RETRY_SLEEP:-2}"
+    done
+    die "could not append to the ledger branch after 5 tries"
     ;;
 
   failed)

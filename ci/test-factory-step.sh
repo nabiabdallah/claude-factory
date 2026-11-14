@@ -39,6 +39,9 @@ echo "$*" >> "$FAKE_GH/calls"
 case "$*" in
   "pr list "*) cat "$FAKE_GH/open-prs" 2>/dev/null || true ;;
   "api repos/acme/factory/branches/"*) [[ -f "$FAKE_GH/branch-exists" ]] && echo branch || exit 1 ;;
+  "api -H Accept: application/vnd.github.raw repos/acme/factory/contents/runs.jsonl?ref=factory-ledger")
+    [[ ! -f "$FAKE_GH/ledger-fails" ]] || { echo "gh: Server Error (HTTP 502)" >&2; exit 1; }
+    cat "$FAKE_GH/ledger" 2>/dev/null || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; } ;;
   "api repos/acme/factory/pulls "*) echo "https://github.com/acme/factory/pull/42" ;;
   "api repos/acme/factory/labels "*|"api repos/acme/factory/issues/42/labels "*) echo '{}' ;;
   *) echo "fake gh: unexpected call: $*" >&2; exit 1 ;;
@@ -61,6 +64,13 @@ case "$SCENARIO" in
   no-commit)   report ;;
   leftovers)   echo x > docs/new.md; g add docs/new.md; g commit -qm "docs: x"; echo z > stray.txt; report ;;
   crash)       exit 7 ;;
+  # What the CLI prints (as JSON) when the subscription's limit is reached; the agent exits non-zero.
+  limit)       echo '{"type":"result","is_error":true,"result":"Claude AI usage limit reached|4102444800","total_cost_usd":1.5,"duration_ms":4000}'; exit 1 ;;
+  limit-nodate) echo '{"is_error":true,"result":"Claude AI usage limit reached"}'; exit 1 ;;
+  # A good run whose report merely talks about usage limits must not count as one.
+  talks)       echo x > docs/new.md; g add docs/new.md; g commit -qm "docs: x"; report
+               echo '{"is_error":false,"result":"Claude AI usage limit reached|4102444800"}' ;;
+  budget)      echo '{"is_error":true,"subtype":"error_max_budget_usd","result":"Reached maximum budget ($25)"}'; exit 1 ;;
   # The agent rewrites the runner so its gate would pass anything: the publish job must not run that copy.
   tamper)      printf '#!/bin/sh\nexit 0\n' > .github/scripts/factory-step.sh; g rm -q ci/test-something.sh
                g add .github/scripts/factory-step.sh; g commit -qm "tamper"; report ;;
@@ -123,6 +133,61 @@ fresh; run_a resolve; SCENARIO=crash expect_fail "agent: a crashed agent fails t
 fresh; run_a resolve
 ( unset FACTORY_AGENT_CMD; cd "$A" && FACTORY_STATE="$SA" .github/scripts/factory-step.sh agent ) >"$work/out" 2>&1 \
   && bad "agent without a credential" || { grep -qF "no Claude credential" "$work/out" && ok "agent refuses without a Claude credential" || bad "agent credential: $(tail -n 2 "$work/out")"; }
+
+# --- the subscription's usage limit
+fresh; run_a resolve; SCENARIO=limit expect_ok "agent: a usage limit ends the phase, it is not a failure" run_a agent
+[[ "$(cat "$SA/outcome")" == usage-limit && "$(cat "$SA/resumes")" == 4102444800 ]] && ok "outcome usage-limit with the reset time from the message" || bad "outcome: $(cat "$SA/outcome" "$SA/resumes" 2>&1)"
+grep -q 'usage limit' "$work/out" && ok "the run says it stopped at the limit" || bad "no usage-limit message: $(cat "$work/out")"
+fresh; run_a resolve; SCENARIO=limit-nodate run_a agent
+resumes="$(cat "$SA/resumes")"
+(( resumes > $(date +%s) + 4 * 3600 && resumes <= $(date +%s) + 5 * 3600 )) && ok "no reset time in the message: pause of 5 hours" || bad "default pause: $resumes"
+fresh; run_a resolve; SCENARIO=talks expect_ok "a good run that mentions a usage limit is not a limit run" run_a agent
+[[ ! -e "$SA/outcome" ]] && ok "(no outcome file)" || bad "a good run was taken for a limit"
+fresh; run_a resolve; SCENARIO=budget expect_fail "the budget guard is a failure, not a usage limit" "exit code 1" run_a agent
+# resolve and paused read the ledger: the last record decides
+fresh; echo '{"step":"B6","outcome":"usage-limit","resumes_at":4102444800}' > "$FAKE_GH/ledger"
+expect_fail "resolve refuses while the last ledger record is a limit still in force" "usage limit was hit" run_a resolve
+out="$(cd "$A" && .github/scripts/factory-step.sh paused)"; [[ "$out" == 4102444800 ]] && ok "paused prints the reset time" || bad "paused: '$out'"
+fresh; echo '{"step":"B6","outcome":"usage-limit","resumes_at":1000}' > "$FAKE_GH/ledger"
+expect_ok "resolve runs once the reset time has passed" run_a resolve
+fresh; printf '%s\n' '{"step":"B6","outcome":"usage-limit","resumes_at":4102444800}' '{"step":"B6","outcome":"published"}' > "$FAKE_GH/ledger"
+expect_ok "a later run clears the pause" run_a resolve
+fresh; printf '%s\n' 'garbage' '{"step":"B6","outcome":"published"}' > "$FAKE_GH/ledger"
+expect_ok "a line that is not JSON in the ledger is skipped" run_a resolve
+fresh; touch "$FAKE_GH/ledger-fails"; expect_fail "resolve stops when the ledger can't be read (not a 404)" "could not read the ledger" run_a resolve
+fresh; expect_ok "no ledger branch yet (404) is not a pause" run_a resolve
+
+# --- the ledger job: appends to runs.jsonl on the factory-ledger branch
+L="$work/remote.git"
+ledger() { (cd "$P" && STEP="$1" OUTCOME="$2" RESUMES="${3:-}" FACTORY_HANDOFF="$work/handoff" FACTORY_STATE="$SP" GH_TOKEN=t \
+  FACTORY_PUSH_URL="$L" GITHUB_RUN_ID=77 .github/scripts/factory-step.sh ledger) >"$work/out" 2>&1; }
+fresh; git clone -q "$work/remote.git" "$P"
+mkdir -p "$work/handoff"
+echo '{"total_cost_usd":1.25,"duration_ms":61500,"num_turns":9,"usage":{"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":30,"cache_creation_input_tokens":"evil"},"result":"x"}' > "$work/handoff/agent.json"
+expect_ok "ledger creates the branch on the first record" ledger B6 published
+git --git-dir="$L" cat-file -p factory-ledger:runs.jsonl > "$work/runs" 2>/dev/null && ok "factory-ledger has runs.jsonl" || bad "no ledger branch"
+[[ "$(git --git-dir="$L" rev-list --count factory-ledger)" == 1 && -z "$(git --git-dir="$L" ls-tree -r --name-only factory-ledger | grep -v '^runs.jsonl$')" ]] \
+  && ok "the branch holds only runs.jsonl (orphan)" || bad "ledger branch carries more than the ledger"
+jq -e '.step == "B6" and .outcome == "published" and .run == "77" and .cost_usd == 1.25 and .duration_s == 62 and .turns == 9 and .input_tokens == 10 and .output_tokens == 20 and .cache_read_tokens == 30 and .cache_creation_tokens == 0 and .resumes_at == null' "$work/runs" >/dev/null \
+  && ok "the record has outcome, duration, cost and tokens (a non-number counts as 0)" || bad "record: $(cat "$work/runs")"
+rm "$work/handoff/agent.json"
+expect_ok "ledger appends a second record (no result: zeros)" ledger B7 usage-limit 4102444800
+git --git-dir="$L" cat-file -p factory-ledger:runs.jsonl > "$work/runs"
+[[ "$(wc -l < "$work/runs")" == 2 ]] && jq -se '.[1].outcome == "usage-limit" and .[1].resumes_at == 4102444800 and .[1].cost_usd == 0' "$work/runs" >/dev/null \
+  && ok "records accumulate, the limit record carries its reset time" || bad "ledger: $(cat "$work/runs")"
+expect_fail "ledger refuses an outcome it does not know" "unexpected outcome" ledger B6 merged
+expect_fail "ledger refuses a limit record without a reset time" "needs its reset time" ledger B6 usage-limit
+expect_fail "ledger refuses a malformed step" "unexpected step" ledger 'B6;x' published
+# What the chain and resolve read back: the ledger above ends on a limit still in force.
+git --git-dir="$L" cat-file -p factory-ledger:runs.jsonl > "$FAKE_GH/ledger"
+expect_fail "after that record, resolve pauses" "usage limit was hit" run_a resolve
+git --git-dir="$L" branch -q -D factory-ledger
+
+# --- the workflow wires the ledger and the limit
+wf="$root/.github/workflows/factory-step.yml"
+grep -q "if: steps.run.outputs.outcome != 'usage-limit'" "$wf" && ok "factory-step.yml skips pack on a usage limit" || bad "pack not skipped on a usage limit"
+grep -q "if: needs.agent.outputs.outcome != 'usage-limit'" "$wf" && ok "factory-step.yml skips publish on a usage limit" || bad "publish not skipped on a usage limit"
+awk '/^  ledger:/{on=1} on' "$wf" | grep -q 'factory-step.sh ledger' && ok "factory-step.yml has a ledger job" || bad "no ledger job"
 
 # --- the happy path, end to end
 fresh; run_a resolve; SCENARIO=ok run_a agent; expect_ok "pack: ok" run_a pack
