@@ -12,44 +12,50 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# The jobs run side by side (factory ADR 0031). Only two carry a `name:`, the two status checks the `main` ruleset
+# requires (ci/protect-repo.sh): `template`, which waits for all the others and gives the verdict, and `manifests`.
+# A pull request that changes only docs/ or root Markdown skips the build jobs; a push to main never does.
 jobs:
-  template:
-    name: Template builds and new-project works
+  changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.scope.outputs.scope }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2 # a pull request's merge commit and its first parent, the base
+
+      # The checkout of a pull request is the merge commit, so its first parent is the base. --no-renames lists
+      # a moved file under both paths. A diff that can't be made means a full run.
+      - name: Does this change need the build jobs?
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          scope=full
+          if [[ "$EVENT" == pull_request ]] && paths="$(git diff --name-only --no-renames HEAD^1 HEAD)"; then
+            scope="$(.github/scripts/ci-changes.sh scope <<<"$paths")"
+          fi
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+          echo "CI scope: $scope" >> "$GITHUB_STEP_SUMMARY"
+
+  # Everything that needs no Maven build: the factory's own scripts against fakes, release notes, docs, lint.
+  scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-
-      - name: Install factory-parent locally (templates build against this commit's parent)
-        working-directory: parents/factory-parent
-        run: ./mvnw -B install
-
-      - name: Verify the skeleton template
-        working-directory: plugins/java-pipeline/templates/skeleton
-        run: ./mvnw -B verify
-
-      - name: Verify the payments-example template
-        working-directory: plugins/java-pipeline/templates/payments-example
-        run: ./mvnw -B verify
-
-      - name: Build the skeleton image to a tarball (Jib config, no push)
-        working-directory: plugins/java-pipeline/templates/skeleton
-        run: |
-          ./mvnw -B -q -DskipTests package jib:buildTar
-          ls -l target/jib-image.tar
-
-      # Supply chain (factory ADR 0009): pins, SBOM, and the same image scan the templates run.
       - name: Release notes (changelog section for every version), their tests, docs links
         run: |
           ci/check-release-notes.sh
           ci/test-release-notes.sh
           ci/check-docs.sh
+
+      # Which pull requests skip the build jobs and what the required check then says (factory ADR 0031).
+      - name: CI scope and verdict
+        run: ci/test-ci-changes.sh
 
       # Repo guardrails (factory ADR 0016): the rulesets and security settings protect-repo.sh would send, checked
       # against the approved rules and the real job names; no GitHub calls.
@@ -85,6 +91,46 @@ jobs:
       - name: Service provisioning (fake gh, stand-in scaffold)
         run: ci/test-new-service.sh
 
+      # Unattended feature run (factory ADR 0018) on the templates themselves: who may start one, which specs
+      # count, what the gate refuses, what gets published. No GitHub, Maven or Claude credential involved.
+      - name: Test factory-run.sh (issue → pipeline → PR) on both templates
+        run: |
+          ci/test-factory-run.sh plugins/java-pipeline/templates/skeleton
+          ci/test-factory-run.sh plugins/java-pipeline/templates/payments-example
+
+  # The templates as they are: build, image, supply chain (factory ADR 0009), the image scan the templates run.
+  templates:
+    needs: changes
+    if: needs.changes.outputs.scope == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Install factory-parent locally (templates build against this commit's parent)
+        working-directory: parents/factory-parent
+        run: ./mvnw -B install
+
+      - name: Verify the skeleton template
+        working-directory: plugins/java-pipeline/templates/skeleton
+        run: ./mvnw -B verify
+
+      - name: Verify the payments-example template
+        working-directory: plugins/java-pipeline/templates/payments-example
+        run: ./mvnw -B verify
+
+      - name: Build the skeleton image to a tarball (Jib config, no push)
+        working-directory: plugins/java-pipeline/templates/skeleton
+        run: |
+          ./mvnw -B -q -DskipTests package jib:buildTar
+          ls -l target/jib-image.tar
+
       - name: Supply-chain checks (SHA-pinned actions, base digest, pinned tools, SBOM)
         run: ci/check-supply-chain.sh plugins/java-pipeline/templates/skeleton
 
@@ -96,6 +142,24 @@ jobs:
           "$RUNNER_TEMP/ci-bin/trivy" image --input target/oci-image \
             --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
             --ignorefile .trivyignore.yaml --exit-code 1
+
+  new-project:
+    needs: changes
+    if: needs.changes.outputs.scope == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Install factory-parent locally (templates build against this commit's parent)
+        working-directory: parents/factory-parent
+        run: ./mvnw -B install
 
       - name: Smoke-test new-project (both templates, same/nested/different packages)
         run: |
@@ -116,9 +180,33 @@ jobs:
               "$out/$p/.claude/settings.json"
           done
 
+  # Each job below creates the projects it needs: the jobs share nothing.
+  postgres:
+    needs: changes
+    if: needs.changes.outputs.scope == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Install factory-parent locally (templates build against this commit's parent)
+        working-directory: parents/factory-parent
+        run: ./mvnw -B install
+
       - name: Smoke-test add-postgres (embedded Postgres, Flyway, transactions)
         run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@users.noreply.github.com"
+          script=plugins/java-pipeline/skills/new-project/scripts/new-project.sh
           out="$RUNNER_TEMP/projects"
+          "$script" ci-skeleton com.acme.customers "$out"
+          "$script" --template payments-example ci-payments-other com.acme.ledger.core "$out"
           (cd "$out/ci-skeleton" && "$GITHUB_WORKSPACE/plugins/java-pipeline/skills/add-postgres/scripts/add-postgres.sh")
           (cd "$out/ci-payments-other" && "$GITHUB_WORKSPACE/plugins/java-pipeline/skills/add-postgres/scripts/add-postgres.sh")
 
@@ -129,26 +217,89 @@ jobs:
           plugins/java-pipeline/templates/skeleton/.github/scripts/ci-tools.sh kubeconform
           PATH="$RUNNER_TEMP/ci-bin:$PATH" ci/test-check-deploy.sh "$RUNNER_TEMP/projects/ci-skeleton"
 
-      # Unattended feature run (factory ADR 0018): who may start one, which specs count, what the gate refuses,
-      # what gets published. No GitHub, Maven or Claude credential involved.
-      - name: Test factory-run.sh (issue → pipeline → PR) on a generated project and on both templates
-        run: |
-          ci/test-factory-run.sh "$RUNNER_TEMP/projects/ci-skeleton"
-          ci/test-factory-run.sh plugins/java-pipeline/templates/skeleton
-          ci/test-factory-run.sh plugins/java-pipeline/templates/payments-example
+      # Unattended feature run (factory ADR 0018) on a generated project; the templates' own are in `scripts`.
+      - name: Test factory-run.sh (issue → pipeline → PR) on a generated project
+        run: ci/test-factory-run.sh "$RUNNER_TEMP/projects/ci-skeleton"
+
+  resource-server:
+    needs: changes
+    if: needs.changes.outputs.scope == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Install factory-parent locally (templates build against this commit's parent)
+        working-directory: parents/factory-parent
+        run: ./mvnw -B install
 
       - name: Smoke-test add-resource-server (JWT via a local stand-in issuer; with and without Postgres)
         run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@users.noreply.github.com"
           out="$RUNNER_TEMP/projects"
           script="$GITHUB_WORKSPACE/plugins/java-pipeline/skills/new-project/scripts/new-project.sh"
           "$script" ci-secured com.acme.secured "$out"
+          "$script" ci-skeleton com.acme.customers "$out"
+          (cd "$out/ci-skeleton" && "$GITHUB_WORKSPACE/plugins/java-pipeline/skills/add-postgres/scripts/add-postgres.sh")
           (cd "$out/ci-secured" && "$GITHUB_WORKSPACE/plugins/java-pipeline/skills/add-resource-server/scripts/add-resource-server.sh")
           (cd "$out/ci-skeleton" && "$GITHUB_WORKSPACE/plugins/java-pipeline/skills/add-resource-server/scripts/add-resource-server.sh")
 
-      # Build hygiene (factory ADR 0013): banned/SNAPSHOT/newer-bytecode dependencies, unpinned plugins, a lowered
-      # coverage floor and untested code each fail the build of a generated project.
+  # Build hygiene (factory ADR 0013): banned/SNAPSHOT/newer-bytecode dependencies, unpinned plugins, a lowered
+  # coverage floor and untested code each fail the build of a generated project.
+  build-rules:
+    needs: changes
+    if: needs.changes.outputs.scope == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Install factory-parent locally (templates build against this commit's parent)
+        working-directory: parents/factory-parent
+        run: ./mvnw -B install
+
       - name: Test factory-parent's build rules (Enforcer, coverage floor) on a generated project
-        run: ci/test-build-hygiene.sh "$RUNNER_TEMP/projects/ci-skeleton"
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@users.noreply.github.com"
+          plugins/java-pipeline/skills/new-project/scripts/new-project.sh ci-skeleton com.acme.customers "$RUNNER_TEMP/projects"
+          ci/test-build-hygiene.sh "$RUNNER_TEMP/projects/ci-skeleton"
+
+  # The required check. It reports on every run, also when a job above failed or was skipped.
+  template:
+    name: Template builds and new-project works
+    needs: [changes, scripts, templates, new-project, postgres, resource-server, build-rules]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Every job passed, or was skipped for a docs-only change
+        run: .github/scripts/ci-changes.sh verdict
+        env:
+          SCOPE: ${{ needs.changes.outputs.scope }}
+          RESULTS: |
+            changes ${{ needs.changes.result }}
+            scripts ${{ needs.scripts.result }}
+            templates ${{ needs.templates.result }}
+            new-project ${{ needs.new-project.result }}
+            postgres ${{ needs.postgres.result }}
+            resource-server ${{ needs.resource-server.result }}
+            build-rules ${{ needs.build-rules.result }}
 
   manifests:
     name: Kubernetes manifests render and match the schemas
