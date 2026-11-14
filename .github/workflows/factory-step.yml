@@ -5,7 +5,7 @@ name: Factory step
 #   agent    checkout without credentials, the Claude credential only; hands over a git bundle and a report
 #   publish  a fresh checkout of the base commit; gates the bundle and pushes it with an App token
 # A third job, ledger, runs whatever the others did and appends the run to runs.jsonl on the factory-ledger branch
-# (ADR 0030). A run that hits the subscription's usage limit ends as `usage-limit`: nothing is published and
+# (ADR 0030); a fourth, inbox, tells the decision inbox when a run did not end in a PR (ADR 0032). A run that hits the subscription's usage limit ends as `usage-limit`: nothing is published and
 # dispatch pauses until the reset.
 # Secrets: CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY), FACTORY_APP_KEY. Variables: FACTORY_APP_CLIENT_ID,
 # FACTORY_APP_SLUG, optional FACTORY_MAX_BUDGET_USD (per run, default 25) and FACTORY_PAUSED (true stops runs).
@@ -181,3 +181,35 @@ jobs:
           RESUMES: ${{ needs.agent.outputs.resumes }}
           OUTCOME: ${{ needs.agent.outputs.outcome == 'usage-limit' && 'usage-limit' || (needs.agent.result == 'success' && needs.publish.result == 'success' && 'published' || 'failed') }}
           FACTORY_HANDOFF: ${{ runner.temp }}/handoff
+
+  inbox:
+    needs: [agent, publish]
+    # A run that chose a step and did not end in a pull request goes to the decision inbox (ADR 0032).
+    if: always() && needs.agent.outputs.step != '' && !(needs.agent.result == 'success' && needs.publish.result == 'success')
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.agent.outputs.base }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: agent-step
+          path: ${{ runner.temp }}/handoff
+
+      - name: Tell the inbox
+        run: .github/scripts/factory-inbox.sh stop
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STEP: ${{ needs.agent.outputs.step }}
+          RESUMES: ${{ needs.agent.outputs.resumes }}
+          OUTCOME: ${{ needs.agent.outputs.outcome == 'usage-limit' && 'usage-limit' || 'failed' }}
+          FACTORY_HANDOFF: ${{ runner.temp }}/handoff
+          FACTORY_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

@@ -72,6 +72,11 @@ jobs:
       - name: Factory step runner (stand-in agent, fake gh)
         run: ci/test-factory-step.sh
 
+      # The decision inbox and weekly digest (factory ADR 0032): a stopped run's comment, the digest's sections,
+      # Dependabot triage, expiry flags; fake gh.
+      - name: Factory inbox and digest (fake gh)
+        run: ci/test-factory-inbox.sh
+
       # Chaining and releases (factory ADR 0026): when the next step is dispatched and when it is held, which
       # version bumps get a tag; fake gh.
       - name: Factory chain and release tags (fake gh)
