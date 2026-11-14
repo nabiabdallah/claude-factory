@@ -43,6 +43,12 @@ jobs:
           java-version: '21'
           cache: maven
 
+      # A step may change the runner itself (B6 did). The phases from `agent` on run this copy, so the run ends
+      # with the runner it started with. Not a security boundary: the agent can write here too, and nothing from
+      # this job runs in the publish job.
+      - name: Keep the runner this run started with
+        run: cp .github/scripts/factory-step.sh "$RUNNER_TEMP/factory-step.sh"
+
       - name: Which step (refuses while paused or while a step PR is open)
         id: resolve
         run: .github/scripts/factory-step.sh resolve
@@ -61,18 +67,18 @@ jobs:
         run: .github/scripts/factory-step.sh tools
 
       - name: Run the step
-        run: .github/scripts/factory-step.sh agent
+        run: bash "$RUNNER_TEMP/factory-step.sh" agent
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           FACTORY_MAX_BUDGET_USD: ${{ vars.FACTORY_MAX_BUDGET_USD }}
 
       - name: Hand over the commits (git bundle) and the report
-        run: .github/scripts/factory-step.sh pack
+        run: bash "$RUNNER_TEMP/factory-step.sh" pack
 
       - name: Say why the run stopped
         if: failure()
-        run: .github/scripts/factory-step.sh failed
+        run: bash "$RUNNER_TEMP/factory-step.sh" failed
 
       - name: Keep the hand-over and the agent's result
         if: always()

@@ -8,6 +8,10 @@ Make claude-factory a production-ready software factory: agents take a spec thro
 review and a PR, and the owner approves. The work is on the factory itself. `payments-service` exists only to
 validate the factory: don't port factory changes to it or build features on it unless the owner asks.
 
+**Done (ADR 0029, scope frozen 2026-11-14):** one real application of the owner's goes from a spec to running on a
+cluster, built by the factory, and gets one week of unattended maintenance. What is left to get there: B6, B7 and
+a minimal C1. Nothing else is added to the queue before that; the real application decides what comes after.
+
 ## How we work
 - Run one session per step. Start the session with "Read docs/ROADMAP.md and continue", and end it when the step's PR merges.
 - Plan before code. Write the step's plan to `docs/plans/<step>.md`, get the owner's OK, then implement. Delete
@@ -29,6 +33,8 @@ run unattended: `gh workflow run factory-step.yml` (ADR 0022). Once B4 is done, 
 step's PR starts the next step, and "go" is no longer needed.
 C1 and the order A6, A4, A5 are the owner's decision of 2026-11-14: "deploy and maintain" can't be shown
 without a cluster, and the evals come before the agents are reshaped.
+A6, A4 and A5 are deferred by the scope freeze (ADR 0029). Their rows say "(deferred)", which also keeps the
+chain from starting them: it only runs a row with a bare id.
 
 | # | Step | Gap it closes | Done when |
 |---|---|---|---|
@@ -45,11 +51,12 @@ without a cluster, and the evals come before the agents are reshaped.
 | B6 | Usage brake and ledger | Nothing records what runs cost or stops dispatch when the subscription runs out | Each run's usage, result and duration are appended to a ledger on the `factory-ledger` branch. A run that hits the subscription's usage limit ends as `usage-limit` (not a failure of the step); dispatch pauses until the reset and the inbox says so. The per-run `FACTORY_MAX_BUDGET_USD` stays as a runaway guard. Done when a simulated limit pauses dispatch and the ledger shows each run |
 | B7 | Maintenance agent and decision inbox | Dependabot PRs, plugin drift and expiring exceptions wait until the owner notices; questions arrive one at a time | A weekly job: triage Dependabot (merge if low; otherwise propose the fix or closing), template-drift and plugin-upgrade PRs to services, flags expiring `.trivyignore` entries and the yearly `CLAUDE_CODE_OAUTH_TOKEN`. One pinned "Factory inbox" issue gets every stop-and-report (decision needed and a recommendation) and a weekly digest (runs, usage, auto-merges, waiting). Done when the digest posts and a stopped run shows up in the inbox |
 | C1 | A real cluster | Deploy and the runtime half of maintenance are untested: no CD job, no post-deploy check, no alert-to-issue loop | Not unattended: it starts with a plan in `docs/plans/C1.md` and the owner's OK (where the cluster runs, who holds its credentials). The chain skips it (it only reads A and B ids), so A6 can run meanwhile. A small cluster (single-node k3s is enough) that demo-service deploys to. Done when a CD job rolls a merged promotion PR out to it and a post-deploy check reports the result. That unblocks the list under "Waiting for a real cluster" |
-| A6 | Pipeline evals and metrics | CI tests scripts and templates, never agent behaviour; cost and cycle time aren't tracked | A benchmark spec runs through the pipeline on plugin changes and its result is recorded; each PR reports stages, attempts and reviewer findings. Comes before A4 and A5: once B5 auto-merges, agent behaviour has to be measured before the agents are restructured |
-| A4 | Orchestrator and implementer split | The main session both conducts the stages and writes the code; a feature can't be resumed or split | An implementer agent; `new-feature` only orchestrates; per-feature state file so a new session resumes at the right stage |
-| A5 | Domain rules out of the agents | Agents are hard-wired to banking (money, idempotency on transfers), which misfires on other software | Agents read a per-project profile; the banking checks become the `payments-example` profile; the skeleton gets a neutral one |
+| A6 (deferred, ADR 0029) | Pipeline evals and metrics | CI tests scripts and templates, never agent behaviour; cost and cycle time aren't tracked | A benchmark spec runs through the pipeline on plugin changes and its result is recorded; each PR reports stages, attempts and reviewer findings. Comes before A4 and A5: once B5 auto-merges, agent behaviour has to be measured before the agents are restructured |
+| A4 (deferred, ADR 0029) | Orchestrator and implementer split | The main session both conducts the stages and writes the code; a feature can't be resumed or split | An implementer agent; `new-feature` only orchestrates; per-feature state file so a new session resumes at the right stage |
+| A5 (deferred, ADR 0029) | Domain rules out of the agents | Agents are hard-wired to banking (money, idempotency on transfers), which misfires on other software | Agents read a per-project profile; the banking checks become the `payments-example` profile; the skeleton gets a neutral one |
 
-Not queued yet (each needs its own plan and the owner's OK): more roles (security reviewer, end-to-end tester),
+Not queued, and not before the definition of done above is met (each then needs its own plan and the owner's
+OK): more roles (security reviewer, end-to-end tester),
 a learning loop from reviewer findings back into
 the agents, and the frontend and Python pipelines already listed under "After #1". GitOps, post-deploy checks
 and the alert-to-issue loop wait for the cluster of step C1.
@@ -71,6 +78,8 @@ there. Use the owner's machine for steps that change the templates or factory-pa
 | #7 Factory as a product | Release tags `java-pipeline-vX.Y.Z` with GitHub Releases; new projects pinned to their plugin release (`ref`, `sparsePaths`); changelogs for the plugin and factory-parent, checked on every PR and release; `docs/ONBOARDING.md`; docs link check; java-pipeline 0.16.0 | ADR 0015, PR #8, tag `java-pipeline-v0.16.0` |
 
 ### Waiting on the owner
+- **Name the first real application** (ADR 0029): the one the factory has to take from a spec to a cluster. A
+  Java backend can start now: the spec-to-PR path works (accepted on demo-service).
 - **Merging B5's PR starts step B6** unattended (as B4 did for B5); `FACTORY_PAUSED=true` holds it, and from now
   also holds auto-merge. B5 acts on real PRs only after the merge: open a docs-only PR to see `risk:low` merge by
   itself. If the reviewer's `--allowedTools` flags don't behave on the pinned CLI, the first run fails (red, not

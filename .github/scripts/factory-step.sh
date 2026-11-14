@@ -11,6 +11,8 @@
 #     publish   push the branch and open the pull request with the App's token
 #   either job
 #     failed    say in the job summary which phase stopped the run and why
+# The agent job runs `agent`, `pack` and `failed` from a copy of this file taken before the agent starts, so a
+# step that changes the runner is packed by the runner it started with.
 # State lives in $FACTORY_STATE. Tested with a fake `gh` and a stand-in agent by ci/test-factory-step.sh.
 set -euo pipefail
 
@@ -37,6 +39,10 @@ phase="${1:-}"
 [[ -n "$phase" ]] || { echo "usage: factory-step.sh queue|resolve|tools|agent|pack|gate|publish|failed" >&2; exit 2; }
 [[ "$phase" == failed || "$phase" == queue ]] || echo "$phase" > "$state/phase"
 
+# bash reads a script while it runs it, and a step may change this very file (B6 did, and bash went on reading
+# where the old file ended, in the middle of the new one). The braces make the rest one command, read whole before
+# any of it runs, and it ends in `exit`, so nothing is read after it.
+{
 case "$phase" in
   queue) # the unfinished steps, in order (factory-chain.sh asks before it dispatches a run)
     queue
@@ -168,3 +174,5 @@ case "$phase" in
   *)
     echo "factory-step: unknown phase '$phase'" >&2; exit 2 ;;
 esac
+exit 0
+}
