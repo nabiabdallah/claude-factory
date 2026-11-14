@@ -4,6 +4,10 @@
 - Date: 2026-11-14
 - Deciders: Noel Abi Abdallah
 - Amends: [ADR 0027](0027-risk-tiers-and-auto-merge.md) (risk tiers and auto-merge, so far in claude-factory only)
+- Amended 2026-11-14 (java-pipeline 0.21.1): the first real review failed at once. The prompt began with the agent
+  file's `---` front matter and the CLI read it as an option. The prompt is now the file's body behind a plain
+  first line, in the factory's reviewer too, and both tests' stand-in reviewers reject a prompt that starts with
+  `-`, as the CLI does.
 
 ## Context
 market-rates PR #5, the factory's first real feature (38 files, +2477), reached the owner with 0 reviews and no
