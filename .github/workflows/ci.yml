@@ -96,6 +96,13 @@ jobs:
       - name: Service provisioning (fake gh, stand-in scaffold)
         run: ci/test-new-service.sh
 
+      # A service's independent review and risk tiers (factory ADR 0033), in both templates: the path lists, a
+      # review of every PR, the comment, the merge of low ones only; fake gh, stand-in reviewer.
+      - name: Service review and risk tiers, both templates (fake gh, stand-in reviewer)
+        run: |
+          ci/test-service-review.sh plugins/java-pipeline/templates/skeleton
+          ci/test-service-review.sh plugins/java-pipeline/templates/payments-example
+
       # Unattended feature run (factory ADR 0018) on the templates themselves: who may start one, which specs
       # count, what the gate refuses, what gets published. No GitHub, Maven or Claude credential involved.
       - name: Test factory-run.sh (issue → pipeline → PR) on both templates

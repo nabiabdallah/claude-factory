@@ -113,6 +113,7 @@ case "$phase" in
 factory:spec|1D76DB|Draft a spec from this issue's idea
 factory:build|0E8A16|Build this issue's approved spec
 risk:high|B60205|Only the owner merges (ADR 0020)
+risk:low|0E8A16|Docs, tests, minor dependency bumps: merges on green checks and an APPROVE (ADR 0033)
 LABELS
     "$here/../../ci/protect-repo.sh" "$repo" service || die "protect-repo.sh failed on $repo"
     give_app || true

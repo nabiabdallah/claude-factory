@@ -108,7 +108,7 @@ c="$FAKE_GH/calls"
   && ok "the service gets the App's key and client id, on stdin (ADR 0028)" || bad "App key: $(grep 'FACTORY_APP' "$c")"
 [[ "$(grep -n 'user/installations/55' "$c" | cut -d: -f1)" -lt "$(grep -n 'secret set FACTORY_APP_KEY' "$c" | cut -d: -f1)" ]] \
   && ok "the key is set only after the repo joined the installation" || bad "the key was set before the installation"
-for l in factory:spec factory:build risk:high; do grep -q "^label create $l --repo acme/demo " "$c" && ok "label $l" || bad "no label $l"; done
+for l in factory:spec factory:build risk:high risk:low; do grep -q "^label create $l --repo acme/demo " "$c" && ok "label $l" || bad "no label $l"; done
 grep -qx 'api --method PUT user/installations/55/repositories/777' "$c" && ok "the App gets the repo" || bad "no App install call"
 grep -q 'repos/acme/demo/rulesets' "$c" && ok "protect-repo.sh ran" || bad "protect-repo.sh did not run"
 fresh; touch "$FAKE_GH/app-refuses"; expect_ok "configure finishes when the App can't be added" cfg
