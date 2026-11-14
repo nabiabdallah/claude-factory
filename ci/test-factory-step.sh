@@ -64,6 +64,11 @@ case "$SCENARIO" in
   # The agent rewrites the runner so its gate would pass anything: the publish job must not run that copy.
   tamper)      printf '#!/bin/sh\nexit 0\n' > .github/scripts/factory-step.sh; g rm -q ci/test-something.sh
                g add .github/scripts/factory-step.sh; g commit -qm "tamper"; report ;;
+  # A step whose work is the runner itself (B6 was one): the file changes, and grows, under the phase that is
+  # running it, and its own `pack` no longer fits this run. bash reads a script as it goes, so after the phase it
+  # would carry on reading where the old file ended, in the middle of the new one.
+  rewrite-runner) { printf '#!/usr/bin/env bash\n'; for _ in $(seq 20000); do echo '(((('; done; } > .github/scripts/factory-step.sh
+               g add .github/scripts/factory-step.sh; g commit -qm "feat: a new runner"; report ;;
 esac
 SH
 chmod +x "$work/bin/gh" "$work/bin/agent"
@@ -78,6 +83,10 @@ fresh() { # a new agent-job clone and state; resets the fake gh
   git clone -q "$work/remote.git" "$A"; mkdir -p "$SA" "$SP"
 }
 run_a() { (cd "$A" && FACTORY_STATE="$SA" .github/scripts/factory-step.sh "$@") >"$work/out" 2>&1; }
+# As the workflow's agent job does: the runner is copied out of the checkout before the agent runs, and the
+# phases from `agent` on run that copy.
+keep() { cp "$A/.github/scripts/factory-step.sh" "$SA.runner.sh"; }
+run_k() { (cd "$A" && FACTORY_STATE="$SA" bash "$SA.runner.sh" "$@") >"$work/out" 2>&1; }
 # The publish job: a clone of the base, its own trusted runner, the hand-over from the agent job's state.
 run_p() {
   [[ -d "$P" ]] || git clone -q "$work/remote.git" "$P"
@@ -144,6 +153,26 @@ expect_fail "gate refuses a deleted test" "deleted tests" run_p gate
 fresh; run_a resolve; SCENARIO=tamper run_a agent; run_a pack || true
 (cd "$A" && git bundle create "$SA/agent.bundle" refs/heads/factory/step-b2 "^$(cat "$SA/base")" >/dev/null 2>&1)
 expect_fail "gate runs the base's runner, not the agent's rewritten one" "deleted tests" run_p gate
+# --- a step that rewrites the runner (the B6 runs of 2026-11-13 failed here)
+fresh; run_a resolve
+SCENARIO=rewrite-runner expect_ok "agent: the phase finishes although the agent rewrote the runner under it" run_a agent
+fresh; run_a resolve; keep
+SCENARIO=rewrite-runner expect_ok "agent, from the kept runner" run_k agent
+expect_ok "pack is the kept runner's, not the agent's rewritten one" run_k pack
+[[ -s "$SA/agent.bundle" ]] && ok "the rewritten runner is handed over as commits" || bad "no bundle"
+expect_ok "gate passes a step that changes the runner" run_p gate
+grep -qx .github/scripts/factory-step.sh "$SP/protected" && ok "the runner change is flagged risk:high" || bad "runner change not flagged"
+wf="$root/.github/workflows/factory-step.yml"
+kept_line="$(grep -n 'cp .github/scripts/factory-step.sh "$RUNNER_TEMP/factory-step.sh"' "$wf" | head -n 1 | cut -d: -f1 || true)"
+resolve_line="$(grep -n 'factory-step.sh resolve' "$wf" | head -n 1 | cut -d: -f1)"
+[[ -n "$kept_line" && "$kept_line" -lt "$resolve_line" ]] && ok "factory-step.yml keeps the runner before any phase" || bad "factory-step.yml doesn't keep the runner first"
+agent_job="$(awk '/^  agent:/{on=1} /^  publish:/{on=0} on' "$wf")"
+for ph in agent pack failed; do
+  grep -qF "run: bash \"\$RUNNER_TEMP/factory-step.sh\" $ph" <<<"$agent_job" && ! grep -qF ".github/scripts/factory-step.sh $ph" <<<"$agent_job" \
+    && ok "agent job runs '$ph' from the kept runner" || bad "agent job runs '$ph' from the checkout"
+done
+awk '/^  publish:/{on=1} on' "$wf" | grep -q 'RUNNER_TEMP/factory-step.sh' && bad "publish job uses a kept runner" || ok "publish job runs only its own checkout's runner"
+
 fresh; run_a resolve; SCENARIO=ok run_a agent; run_a pack; rm "$SA/report.md"
 expect_fail "gate refuses a hand-over without a report" "no bundle or no report" run_p gate
 fresh; run_a resolve; SCENARIO=ok run_a agent; run_a pack; echo B9 > "$SA/step"

@@ -4,6 +4,11 @@
 - Date: 2026-11-12
 - Deciders: Noel Abi Abdallah
 - Implements: step B2 of [ADR 0020](0020-self-running-factory.md)
+- Amended 2026-11-14: a step may change the runner itself. Both unattended B6 runs of 2026-11-13 (43520012866,
+  43521527466) failed after the agent had finished: it had rewritten `factory-step.sh`, and bash, which reads a
+  script while running it, went on reading where the old file ended. The script is now read whole before a phase
+  runs, and the agent job runs `agent`, `pack` and `failed` from a copy taken before the agent starts, so a run
+  ends with the runner it started with. The publish job is unchanged: it still runs only the base's runner.
 
 ## Context
 Queue steps run in an interactive session on the owner's laptop, inside a sandbox that blocks `gh`, Maven
