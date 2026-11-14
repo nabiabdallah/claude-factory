@@ -55,6 +55,11 @@ chain from starting them: it only runs a row with a bare id.
 | A4 (deferred, ADR 0029) | Orchestrator and implementer split | The main session both conducts the stages and writes the code; a feature can't be resumed or split | An implementer agent; `new-feature` only orchestrates; per-feature state file so a new session resumes at the right stage |
 | A5 (deferred, ADR 0029) | Domain rules out of the agents | Agents are hard-wired to banking (money, idempotency on transfers), which misfires on other software | Agents read a per-project profile; the banking checks become the `payments-example` profile; the skeleton gets a neutral one |
 
+Built outside the queue under the freeze's exception (a gap the first real application showed): independent
+review of every service PR and risk tiers in services (ADR 0033, java-pipeline 0.21.0). market-rates PR #5 had
+reached the owner with no review but the builder's own; a fresh reviewer then found two defects the in-run
+reviewer had passed.
+
 Not queued, and not before the definition of done above is met (each then needs its own plan and the owner's
 OK): more roles (security reviewer, end-to-end tester),
 a learning loop from reviewer findings back into

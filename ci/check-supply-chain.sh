@@ -61,7 +61,22 @@ for t in plugins/java-pipeline/templates/*; do
     || problem "$wf: FACTORY_APP_KEY is used outside the token action"
   ! sed -n '/^  agent:/,/^  publish:/p' "$wf" | grep -qE 'secrets\.FACTORY_APP|steps\.app\.' || problem "$wf: the agent or gate job can reach the App"
   grep -q "GH_TOKEN: [$][{][{] steps.app.outputs.token || secrets.FACTORY_PR_TOKEN || github.token [}][}]" "$wf" || problem "$wf: the publish job doesn't open the pull request as the App"
+  # ADR 0033: the review job holds the Claude credential only; the App's key reaches only the merge job's token action.
+  rw="$t/.github/workflows/factory-review.yml"
+  if [[ -f "$rw" && -x "$t/.github/scripts/risk-tier.sh" && -f "$t/.github/workflows/risk-tier.yml" ]]; then
+    review_job=$(sed -n '/^  review:/,/^  comment:/p' "$rw")
+    ! grep -qE 'GH_TOKEN|github\.token|secrets\.FACTORY_APP|: write\b' <<<"$review_job" || problem "$rw: the review job holds a GitHub token, the App or a write permission"
+    [[ "$(grep -c 'FACTORY_APP_KEY' "$rw")" == "$(grep -cE "^      FACTORY_APP: [$][{][{] secrets[.]FACTORY_APP_KEY != '' [}][}]$|^          private-key: [$][{][{] secrets[.]FACTORY_APP_KEY [}][}]$|^# .*FACTORY_APP_KEY" "$rw")" ]] \
+      || problem "$rw: FACTORY_APP_KEY is used outside the token action"
+    ! sed -n '/^  pick:/,/^  merge:/p' "$rw" | grep -qE 'secrets\.FACTORY_APP|steps\.app\.' || problem "$rw: a job before merge can reach the App"
+    ! grep -qE '^\s+run:.*\$\{\{' "$rw" "$t/.github/workflows/risk-tier.yml" || problem "$t: a review or label run command interpolates an expression"
+  else
+    problem "$t: no factory-review.yml, risk-tier.yml and executable risk-tier.sh"
+  fi
   if [[ -z "$first" ]]; then first="$t"; else
+    for f in scripts/risk-tier.sh workflows/risk-tier.yml workflows/factory-review.yml; do
+      cmp -s "$first/.github/$f" "$t/.github/$f" || problem "$t/.github/$f differs from $first's"
+    done
     cmp -s "$first/.github/scripts/factory-run.sh" "$runner" || problem "$runner differs from $first's"
     cmp -s "$first/.github/workflows/factory-feature.yml" "$wf" || problem "$wf differs from $first's"
     cmp -s "$first/.github/workflows/factory-chain.yml" "$t/.github/workflows/factory-chain.yml" || problem "$t's factory-chain.yml differs from $first's"
