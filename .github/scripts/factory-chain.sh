@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Chaining and releases in the factory repo (factory ADR 0026). Two phases, each called by its own workflow:
 #   next-step   (factory-chain.yml: a merge that changed docs/ROADMAP.md, once a day, or by hand)
-#               dispatches factory-step.yml for the first unfinished queue step, unless the factory is paused, a
+#               dispatches factory-step.yml for the first unfinished queue step, unless the factory is paused, the
+#               ledger says the subscription's usage limit is still in force (ADR 0030), a
 #               step PR is open, its branch exists, a step run is queued or running, or the last step run failed
 #               on this same commit. Every "no" is a green run that says why in the job summary.
 #   release     (release-tag.yml: a merge that changed a component's version)
@@ -21,6 +22,8 @@ case "${1:-}" in
   next-step)
     need GITHUB_REPOSITORY GITHUB_SHA GH_TOKEN
     [[ "${FACTORY_PAUSED:-}" != true ]] || skip "the factory is paused (repository variable FACTORY_PAUSED=true)"
+    until="$("$here/factory-step.sh" paused)" || die "could not read the ledger"
+    [[ -z "$until" ]] || skip "the subscription's usage limit was hit: paused until $(date -u -d "@$until" '+%Y-%m-%d %H:%M UTC') (the ledger's last record)"
     step="$("$here/factory-step.sh" queue | head -n 1)"
     [[ -n "$step" ]] || skip "no unfinished step in the roadmap's queue"
     branch="factory/step-${step,,}"
