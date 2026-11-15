@@ -1,0 +1,26 @@
+{
+  "name": "app-skeleton",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --max-warnings 0 && prettier --check .",
+    "format": "prettier --write .",
+    "arch": "depcruise src --config .dependency-cruiser.cjs",
+    "test": "vitest run --coverage",
+    "bundle": "node scripts/check-bundle.mjs",
+    "verify": "npm run typecheck && npm run lint && npm run arch && npm run test && npm run build && npm run bundle"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router": "8.5.1"
+  }
+}
