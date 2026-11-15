@@ -60,8 +60,19 @@ review of every service PR and risk tiers in services (ADR 0033, java-pipeline 0
 reached the owner with no review but the builder's own; a fresh reviewer then found two defects the in-run
 reviewer had passed.
 
-The frontend pipeline may be planned and built during the maintenance week (owner, 2026-11-15, ADR 0029
-amendment): its own plan and the owner's OK first, and nothing that changes market-rates that week.
+### Frontend pipeline (ADR 0035; plan approved 2026-11-15, [plans/frontend-pipeline.md](plans/frontend-pipeline.md))
+Outside the unattended queue (the chain only runs A and B ids): a session takes one step per PR. It may be built
+while C1 waits for its VM; C1's acceptance comes first once the VM exists. Nothing here changes market-rates.
+
+| # | Step | Done when |
+|---|---|---|
+| F0 ✅ | Runner reads the plugin, verify command and protected paths from the project | Done: java-pipeline 0.23.0. `.github/factory.conf`, read from the base commit; Java services need none. `ci/test-factory-run.sh` covers a non-Maven project |
+| F1 | `web-pipeline` skeleton template (React, TypeScript, Vite) and its CI | Factory CI builds it: `npm ci`, `npm run verify`, image build and scan |
+| F2 (waits for the owner) | Plugin: agents, `new-project`, `new-feature`, `intake`, hooks | The plan recommends A5 first, so the web agents don't copy the banking checks; A5 is deferred (ADR 0029). The owner decides the order |
+| F3 | Deploy: nginx image, overlays, deploy gate, CSP | kubeconform and `test-check-deploy.sh` pass on a generated UI project |
+| F4 | Contract: OpenAPI from the Java template, generated client, drift check | A changed endpoint in the service fails the UI build until the client is regenerated |
+| F5 | `add-oidc-login` skill | Login flow tested against a local stand-in issuer |
+| F6 | Acceptance | A real `factory:spec` → `factory:build` run on a fresh UI repo ends in a merged PR |
 
 Not queued, and not before the definition of done above is met (each then needs its own plan and the owner's
 OK): more roles (security reviewer, end-to-end tester),

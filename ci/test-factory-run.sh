@@ -105,6 +105,14 @@ case "$SCENARIO" in
   skip-tests) sed -i 's|</parent>|</parent><properties><skipTests>true</skipTests></properties>|' pom.xml ;;
   dependency) sed -i 's|</parent>|</parent><properties><demo.version>1.0.0</demo.version></properties>|' pom.xml ;;
   delete-test) git rm -q "$SOME_TEST" ;;
+  # A project of another pipeline (.github/factory.conf): its own protected files, tests and build file.
+  web-lockfile) echo "{}" >> package-lock.json ;;
+  web-arch-rules) echo "// loosened" >> src/architecture.test.ts ;;
+  web-mvnw) echo "# changed" >> mvnw ;;
+  web-weaken) sed -i 's|"scripts"|"coverageThreshold": 1, "scripts"|' package.json ;;
+  web-dependency) sed -i 's|"scripts"|"dependencies": {"x": "1.0.0"}, "scripts"|' package.json ;;
+  web-delete-test) git rm -q tests/app.test.ts ;;
+  web-conf) echo "verify=true" > .github/factory.conf ;;
   # The agent rewrites the runner so its gate would pass anything: the gate job must not run that copy.
   tamper) cat > .github/scripts/factory-run.sh <<'EVIL'
 #!/bin/sh
@@ -337,5 +345,54 @@ chain; push 0007-new.md Approved; touch "$FAKE_GH/branch-exists"; expect pass "c
 check "(nothing labelled or dispatched)" nothing
 chain; push 0007-new.md Approved; touch "$FAKE_GH/dispatch-refused"; expect fail "chain: a build that can't be dispatched fails the run" chain
 fresh
+
+# a project of another pipeline: .github/factory.conf names the plugin, the build and what is protected (F0)
+git switch -q main; git reset -q --hard "$c0"; git clean -qfd
+cat > .github/factory.conf <<'CONF'
+# what the unattended runner needs to know about this project
+plugin=web-pipeline
+verify=npm run verify --silent
+protected=package-lock.json .nvmrc src/*.test.ts
+tests=tests
+build_file=package.json
+build_weaken=coverageThreshold|--passWithNoTests
+CONF
+mkdir -p tests && echo "test()" > tests/app.test.ts && echo "rules()" > src/architecture.test.ts
+echo '{"scripts": {"verify": "x"}}' > package.json && echo '{}' > package-lock.json
+sed -i 's/java-pipeline-v9\.9\.9/web-pipeline-v1.2.3/' .claude/settings.json
+git add -A && g commit -q -m "a web project"
+c0="$(git rev-parse HEAD)"
+rm -rf "$work/base.git" && git clone -q --bare "$work/p" "$work/base.git"
+cat > "$work/bin/npm" <<'SH'
+#!/usr/bin/env bash
+echo "$*" >> "$work/npm-calls"
+[[ ! -f "$work/npm-red" ]]
+SH
+chmod +x "$work/bin/npm"
+web() { fresh; unset FACTORY_VERIFY_CMD; rm -f "$work/npm-calls" "$work/npm-red"; SCENARIO="${1:-good}"; }
+web; expect pass "another pipeline: a clean change passes the gate" $TO_GATE
+check "resolve records that plugin and its release" test "$(cat "$FACTORY_STATE/plugin") $(cat "$FACTORY_STATE/plugin-ref")" = "web-pipeline web-pipeline-v1.2.3"
+check "the agent got that plugin's skill" grep -qE '^--print /web-pipeline:new-feature ' "$FAKE_GH/agent-args"
+check "the gate ran the project's own build command, as arguments" test "$(cat "$work/npm-calls")" = "run verify --silent"
+web; touch "$work/npm-red"; expect fail "another pipeline: its red build fails the run" $TO_GATE
+check "(the reason names the command)" grep -q 'the build (npm run verify --silent) is red' "$work/state-q/failure"
+for s in web-lockfile web-arch-rules web-weaken web-delete-test web-conf workflow settings spec promotion; do
+  web "$s"; expect fail "another pipeline: gate refuses $s" $TO_GATE
+done
+web web-conf; expect fail "a run can't rewrite factory.conf to choose its own build" $TO_GATE
+check "(refused as a protected file, and the base's build command stays in force)" grep -q 'changed a protected file: \.github/factory\.conf' "$work/state-q/failure"
+web web-mvnw; expect pass "another pipeline: a Java-only protected file is an ordinary file there" $TO_GATE
+web web-dependency; expect pass "another pipeline: an ordinary build-file change is allowed" $TO_GATE
+web; expect pass "another pipeline: publish" $FULL
+check "the pull request says which plugin built it and which build was green" \
+  grep -q 'Built unattended by the web-pipeline factory run; `npm run verify --silent` was green' "$work/state-r/pr-body.md"
+web; sed -i 's/web-pipeline-v1\.2\.3/java-pipeline-v9.9.9/' .claude/settings.json
+expect fail "a project pinned to another plugin's release is refused" resolve
+web; echo "verfy=npm test" >> .github/factory.conf; git add -A; g commit -q -m typo; expect fail "an unknown line in factory.conf stops the run" resolve
+web; sed -i 's/^plugin=.*/plugin=..\/evil/' .github/factory.conf; git add -A; g commit -q -m bad; expect fail "a plugin name with a path in it is refused" resolve
+web; sed -i 's/^verify=.*/verify=/' .github/factory.conf; git add -A; g commit -q -m empty
+c1="$c0"; c0="$(git rev-parse HEAD)"; rm -rf "$work/base.git" && git clone -q --bare "$work/p" "$work/base.git"
+SCENARIO=good; expect fail "an empty value in factory.conf stops the run" $TO_GATE
+c0="$c1"; fresh
 
 [[ "$fails" -eq 0 ]] && echo "factory-run: all cases behave as expected" || { echo "factory-run: test FAILED"; exit 1; }

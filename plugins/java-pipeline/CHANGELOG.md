@@ -5,6 +5,19 @@ All notable changes to the plugin, newest first ([Keep a Changelog](https://keep
 Each version is tagged `java-pipeline-vX.Y.Z`; projects pin the tag in `.claude/settings.json` (`ref`).
 Decisions are in `docs/factory-adr/`.
 
+## [0.23.0] - 2026-11-15
+
+- Changed: the unattended runner (`factory-run.sh`) is no longer tied to Java. A project may say in
+  `.github/factory.conf` which plugin runs, which command must be green, which files are protected, where its
+  tests are and what may not be added to its build file (the script's header lists the keys). The file is read
+  from the base commit, never from the agent's tree. Without it, everything is as before: a Java service of
+  `java-pipeline`. This is step F0 of the frontend pipeline (factory ADR 0035).
+- Changed: a red build's reason names the command ("the build (./mvnw -B -q verify) is red on the agent's
+  change"), and the pull request's footer names the plugin and the command.
+
+**Upgrading:** copy `factory-run.sh` (`.github/scripts/`) from `templates/skeleton/.github/` and set `ref` to
+`java-pipeline-v0.23.0`. Don't add a `factory.conf`: a Java service needs none.
+
 ## [0.22.1] - 2026-11-15
 
 - Fixed: the `image` job of 0.22.0 failed on its first push to `main` ("Build an OCI image index is not yet

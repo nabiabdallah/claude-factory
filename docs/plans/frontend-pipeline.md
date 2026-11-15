@@ -1,9 +1,8 @@
 # Plan: frontend pipeline (`web-pipeline`)
 
-Status: proposed 2026-11-11, waiting for the owner's OK. Not in the autonomous queue: the roadmap says each new
-pipeline gets its own plan first, and seven of the choices below are the owner's. Merging this file with the
-choices edited is the OK; the steps then move into the queue in `docs/ROADMAP.md` and this file is deleted when
-the last one merges.
+Status: approved by the owner on 2026-11-15 with all seven recommendations (ADR 0035). The steps are in
+`docs/ROADMAP.md` under "Frontend pipeline"; this file is deleted when the last one merges. F0 is built. F2 waits
+for the owner's word on its order with A5 (see "Order relative to the queue").
 
 ## Goal
 A second plugin in the marketplace so the factory can build the UI of a product as well as its API: same shape
