@@ -151,10 +151,19 @@ Once per cluster ([ADR 0012](factory-adr/0012-deploy-safety.md), [ADR 0014](fact
 - set the Collector address in `deploy/k8s/base/deployment.yaml` (placeholder `otel-collector.monitoring:4318`).
 
 Promote with a PR that sets `newTag` in `deploy/k8s/overlays/<env>/kustomization.yaml` to a commit on `main`; CI
-(`manifests`) checks it. Then `kubectl apply -k deploy/k8s/overlays/<env>`. A release that crosses a
-`-- rollout: recreate` migration needs `components/recreate` in that overlay (CI tells you).
+(`manifests`) checks it. `gh workflow run promote.yml -f env=staging` opens that PR for the newest commit with an
+image (`-f commit=<sha>` for another). A release that crosses a `-- rollout: recreate` migration needs
+`components/recreate` in that overlay (CI tells you).
 
-**Check:** `kubectl -n customer-service-staging rollout status deployment/customer-service`.
+How the merged PR reaches the cluster ([ADR 0034](factory-adr/0034-pull-based-deploys.md)):
+- **A cluster with Flux** pulls it within about a minute; GitHub holds no cluster credentials. Flux posts the
+  commit status `flux/customer-service-<env>` on the merge commit. A red one opens the issue "Deploy failed: …" in
+  the service's repo, and the next green one closes it.
+- **Any other cluster:** `kubectl apply -k deploy/k8s/overlays/<env>`.
+
+The image is built for `linux/amd64` and `linux/arm64`, so the nodes may be either.
+
+**Check:** the commit status is green, or `kubectl -n customer-service-staging rollout status deployment/customer-service`.
 
 ## 9. Upgrading a service
 

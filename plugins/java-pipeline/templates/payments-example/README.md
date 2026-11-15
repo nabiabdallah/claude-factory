@@ -50,7 +50,7 @@ Requires `jq` on your PATH (the plugin hooks parse their JSON input with it).
 ## Image and deployment
 
 - CI pushes `ghcr.io/nabiabdallah/<service>:<sha>` and `:main` on every push to `main` (Jib, distroless,
-  non-root; no Docker needed). PRs only run `verify`.
+  non-root; no Docker needed), for `linux/amd64` and `linux/arm64` under one tag. PRs only run `verify`.
 - `deploy/k8s/` (claude-factory ADR 0012): `base/` (Deployment, Service, PodDisruptionBudget, default-deny
   NetworkPolicy), `overlays/staging` (1 replica) and `overlays/prod` (3), and `components/recreate`.
   Once per cluster: create the namespace `<service>-<env>`, the database Secret in it, and label the ingress
@@ -63,10 +63,18 @@ Requires `jq` on your PATH (the plugin hooks parse their JSON input with it).
 - **Promote** = a PR that sets an overlay's `newTag` to a commit on `main` (CI pushed and signed its image).
   Never `main` or `latest`. The PR review is the gate; `.github/scripts/check-deploy.sh` (CI job `manifests`)
   rejects mutable tags, commits not on `main`, edited released migrations and rollbacks across a migration.
+  `gh workflow run promote.yml -f env=staging` opens that PR for the newest commit that has an image
+  (`-f commit=<sha>` for another one; an older one is a rollback).
+- **With a cluster that pulls** (Flux, claude-factory ADR 0034) merging the promotion PR is the deploy: there is
+  no `kubectl apply` and GitHub holds no cluster credentials. Flux reports the rollout as a commit status
+  (`flux/<service>-<env>`) on the merge commit. A failed one opens the issue "Deploy failed: …" (label
+  `deploy-failed`), which closes itself on the next success (`post-deploy.yml`); the previous version keeps
+  serving meanwhile.
 - **Breaking migration** (`-- rollout: recreate`, see `CLAUDE.md`): the promotion that crosses it must add
   `components: [../../components/recreate]` to the overlay (all old pods stop first: downtime), and the next
   promotion must remove it. CI enforces both. Prefer expand/contract, which keeps the rolling update.
-- Build the image locally without pushing (needs network to gcr.io): `./mvnw -DskipTests package jib:buildTar`.
+- Build the image locally without pushing (needs network to gcr.io): `./mvnw -DskipTests package jib:buildTar`
+  (add `-Djib.from.platforms=linux/arm64` for the arm64 one; a tarball holds one platform).
 
 ## Build rules
 

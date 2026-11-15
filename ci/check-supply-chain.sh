@@ -44,6 +44,7 @@ done
 first=""
 for t in plugins/java-pipeline/templates/*; do
   wf="$t/.github/workflows/factory-feature.yml"; runner="$t/.github/scripts/factory-run.sh"
+  flat_ci=$(tr -s '\n' ' ' < "$t/.github/workflows/ci.yml")
   [[ -f "$wf" && -x "$runner" ]] || { problem "$t: no factory-feature.yml or executable factory-run.sh"; continue; }
   grep -qE '^claude_code_version=[0-9]+\.[0-9]+\.[0-9]+$' "$runner" || problem "$runner: Claude Code CLI is not pinned to an exact version"
   grep -qE '^\s+persist-credentials: false$' "$wf" || problem "$wf: checkout leaves GitHub credentials for the agent"
@@ -73,8 +74,23 @@ for t in plugins/java-pipeline/templates/*; do
   else
     problem "$t: no factory-review.yml, risk-tier.yml and executable risk-tier.sh"
   fi
+  # ADR 0034: the promotion opens its pull request as the App, whose key reaches only the token action; the
+  # status' text reaches the script through the environment; the pushed image has both platforms.
+  pw="$t/.github/workflows/promote.yml"; dw="$t/.github/workflows/post-deploy.yml"
+  if [[ -f "$pw" && -f "$dw" && -x "$t/.github/scripts/deploy.sh" ]]; then
+    [[ "$(grep -c 'FACTORY_APP_KEY' "$pw")" == "$(grep -cE "^      FACTORY_APP: [$][{][{] secrets[.]FACTORY_APP_KEY != '' [}][}]$|^          private-key: [$][{][{] secrets[.]FACTORY_APP_KEY [}][}]$" "$pw")" ]] \
+      || problem "$pw: FACTORY_APP_KEY is used outside the token action"
+    ! grep -qE '^\s+run:.*\$\{\{' "$pw" "$dw" || problem "$t: a promote or post-deploy run command interpolates an expression"
+    ! grep -qE 'secrets\.|: write' <(grep -v 'issues: write' "$dw") || problem "$dw: it needs no secret and no permission but issues: write"
+  else
+    problem "$t: no promote.yml, post-deploy.yml and executable deploy.sh"
+  fi
+  grep -q 'jib:build -Djib.from.platforms=linux/amd64,linux/arm64' <<<"$flat_ci" || problem "$t: the image job does not push linux/amd64 and linux/arm64"
   if [[ -z "$first" ]]; then first="$t"; else
     for f in scripts/risk-tier.sh workflows/risk-tier.yml workflows/factory-review.yml; do
+      cmp -s "$first/.github/$f" "$t/.github/$f" || problem "$t/.github/$f differs from $first's"
+    done
+    for f in scripts/deploy.sh workflows/promote.yml workflows/post-deploy.yml; do
       cmp -s "$first/.github/$f" "$t/.github/$f" || problem "$t/.github/$f differs from $first's"
     done
     cmp -s "$first/.github/scripts/factory-run.sh" "$runner" || problem "$runner differs from $first's"

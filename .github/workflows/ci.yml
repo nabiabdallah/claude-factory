@@ -103,6 +103,13 @@ jobs:
           ci/test-service-review.sh plugins/java-pipeline/templates/skeleton
           ci/test-service-review.sh plugins/java-pipeline/templates/payments-example
 
+      # Promotions and rollout reports (factory ADR 0034), in both templates: which commit is promoted, what is
+      # refused, the pull request, the "Deploy failed" issue; fake gh and docker.
+      - name: Promotions and rollout reports, both templates (fake gh, fake docker)
+        run: |
+          ci/test-deploy.sh plugins/java-pipeline/templates/skeleton
+          ci/test-deploy.sh plugins/java-pipeline/templates/payments-example
+
       # Unattended feature run (factory ADR 0018) on the templates themselves: who may start one, which specs
       # count, what the gate refuses, what gets published. No GitHub, Maven or Claude credential involved.
       - name: Test factory-run.sh (issue → pipeline → PR) on both templates
@@ -137,23 +144,30 @@ jobs:
         working-directory: plugins/java-pipeline/templates/payments-example
         run: ./mvnw -B verify
 
-      - name: Build the skeleton image to a tarball (Jib config, no push)
+      # One tarball per platform the services push (factory ADR 0034); Jib builds one platform per tarball.
+      - name: Build the skeleton image of each platform to a tarball (Jib config, no push)
         working-directory: plugins/java-pipeline/templates/skeleton
         run: |
-          ./mvnw -B -q -DskipTests package jib:buildTar
-          ls -l target/jib-image.tar
+          for arch in amd64 arm64; do
+            ./mvnw -B -q -DskipTests package jib:buildTar \
+              -Djib.from.platforms=linux/$arch -Djib.outputPaths.tar=target/jib-image-$arch.tar
+            ls -l target/jib-image-$arch.tar
+          done
 
       - name: Supply-chain checks (SHA-pinned actions, base digest, pinned tools, SBOM)
         run: ci/check-supply-chain.sh plugins/java-pipeline/templates/skeleton
 
-      - name: Scan the skeleton image (Trivy, as template CI does)
+      - name: Scan the skeleton image of each platform (Trivy, as template CI does)
         working-directory: plugins/java-pipeline/templates/skeleton
         run: |
           .github/scripts/ci-tools.sh trivy
-          mkdir -p target/oci-image && tar -xf target/jib-image.tar -C target/oci-image
-          "$RUNNER_TEMP/ci-bin/trivy" image --input target/oci-image \
-            --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
-            --ignorefile .trivyignore.yaml --exit-code 1
+          for arch in amd64 arm64; do
+            echo "== linux/$arch"
+            mkdir -p target/oci-image-$arch && tar -xf target/jib-image-$arch.tar -C target/oci-image-$arch
+            "$RUNNER_TEMP/ci-bin/trivy" image --input target/oci-image-$arch \
+              --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+              --ignorefile .trivyignore.yaml --exit-code 1
+          done
 
   new-project:
     needs: changes

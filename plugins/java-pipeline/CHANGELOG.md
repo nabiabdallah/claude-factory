@@ -5,6 +5,28 @@ All notable changes to the plugin, newest first ([Keep a Changelog](https://keep
 Each version is tagged `java-pipeline-vX.Y.Z`; projects pin the tag in `.claude/settings.json` (`ref`).
 Decisions are in `docs/factory-adr/`.
 
+## [0.22.0] - 2026-11-15
+
+First half of roadmap step C1, a real cluster (factory ADR 0034): what a service needs to be deployed by a cluster
+that pulls from git.
+
+- Changed: CI pushes the image for `linux/amd64` and `linux/arm64` under one tag (the first cluster's nodes are
+  ARM). cosign signs the index and each platform's image; the SBOM attestation is on the index. The Trivy scan
+  runs on each platform's image.
+- Added: `promote.yml`, started by hand (`gh workflow run promote.yml -f env=staging [-f commit=<sha>]`). It opens
+  the promotion pull request as the factory's App: the newest commit on `main` whose image has both platforms, or
+  the commit you name. `check-deploy.sh` judges it as before, and you merge it (deploy files are `risk:high`).
+- Added: `post-deploy.yml`. Flux reports each rollout as a commit status; a failed one opens the issue "Deploy
+  failed: <context>" (label `deploy-failed`, one per environment, a comment per further failing commit), and the
+  next success closes it.
+- Added: `.github/scripts/deploy.sh` holds both; `ci/test-deploy.sh` in claude-factory tests it on both templates.
+
+**Upgrading:** copy `ci.yml`, `promote.yml` and `post-deploy.yml` (`.github/workflows/`) and `deploy.sh`
+(`.github/scripts/`, executable) from `templates/skeleton/.github/`, and set `ref` to `java-pipeline-v0.22.0`. If
+your `ci.yml` has changes of your own, take only the two image steps of `verify` and the `image` job. Images
+pushed before the upgrade are amd64 only: `promote.yml` skips them, and an ARM node can't run them. Nothing
+changes for a cluster you deploy to with `kubectl apply`.
+
 ## [0.21.2] - 2026-11-15
 
 - Fixed: a pull request merged in the seconds between the review's `pick` and `review` jobs turned the review red
