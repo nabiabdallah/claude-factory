@@ -185,7 +185,7 @@ else
   bad "missing promote.yml or post-deploy.yml"
 fi
 flat="$(tr -s '\n' ' ' < "$ci")"
-grep -q 'jib:build -Djib.from.platforms=linux/amd64,linux/arm64' <<<"$flat" && ok "ci.yml pushes the image for amd64 and arm64" || bad "ci.yml does not push both platforms"
+grep -q 'jib:build -Djib.from.platforms=linux/amd64,linux/arm64 -Djib.container.format=Docker ' <<<"$flat" && ok "ci.yml pushes the image for amd64 and arm64" || bad "ci.yml does not push both platforms"
 grep -qE 'for arch in amd64 arm64' "$ci" && [[ "$(grep -c 'jib-image-\$arch\|oci-image-\$arch' "$ci")" -ge 3 ]] \
   && ok "ci.yml scans the image of each platform" || bad "ci.yml does not scan each platform's image"
 grep -qE 'cosign sign --yes --recursive' "$ci" && ok "ci.yml signs the index and each platform's image" || bad "ci.yml does not sign recursively"

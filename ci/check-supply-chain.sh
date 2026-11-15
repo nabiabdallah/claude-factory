@@ -85,7 +85,7 @@ for t in plugins/java-pipeline/templates/*; do
   else
     problem "$t: no promote.yml, post-deploy.yml and executable deploy.sh"
   fi
-  grep -q 'jib:build -Djib.from.platforms=linux/amd64,linux/arm64' <<<"$flat_ci" || problem "$t: the image job does not push linux/amd64 and linux/arm64"
+  grep -q 'jib:build -Djib.from.platforms=linux/amd64,linux/arm64 -Djib.container.format=Docker ' <<<"$flat_ci" || problem "$t: the image job does not push linux/amd64 and linux/arm64 in Docker's manifest format (Jib builds no OCI index)"
   if [[ -z "$first" ]]; then first="$t"; else
     for f in scripts/risk-tier.sh workflows/risk-tier.yml workflows/factory-review.yml; do
       cmp -s "$first/.github/$f" "$t/.github/$f" || problem "$t/.github/$f differs from $first's"
