@@ -38,3 +38,12 @@ The owner froze the scope on 2026-11-14.
 - Negative: once B5 auto-merges, agent behaviour is still unmeasured until A6. The required checks and the
   independent reviewer are the only guard.
 - Negative: an application that needs a UI has no pipeline for it; the UI is built outside the factory or waits.
+
+## Amendment (2026-11-15): C1's choices, and the frontend during the maintenance week
+- The owner chose C1's cluster: Oracle Cloud Always Free (an Ampere A1 ARM VM, EU region, single-node k3s), with
+  Flux in the cluster pulling deploys from the service repo. GitHub holds no cluster credentials; deploying is
+  merging a promotion PR. Reasons: free while the factory is still an experiment, and an EU region, where Binance
+  (market-rates' provider) answers.
+- The owner moved the frontend pipeline forward: it may be planned and built during the week of unattended
+  maintenance, which is mostly waiting. It is a separate plugin and must not change market-rates or the
+  maintenance setup that week. It still needs its own plan and the owner's OK.

@@ -5,6 +5,16 @@ All notable changes to the plugin, newest first ([Keep a Changelog](https://keep
 Each version is tagged `java-pipeline-vX.Y.Z`; projects pin the tag in `.claude/settings.json` (`ref`).
 Decisions are in `docs/factory-adr/`.
 
+## [0.21.2] - 2026-11-15
+
+- Fixed: a pull request merged in the seconds between the review's `pick` and `review` jobs turned the review red
+  ("could not produce the diff"): main already held its head, so the diff was empty (market-rates PR #10). The
+  review now reports `skipped` when the head is already on main, and posts and merges nothing.
+- In claude-factory: the factory's own auto-merge reviewer had the same race and gets the same fix.
+
+**Upgrading:** copy `risk-tier.sh` (`.github/scripts/`) from `templates/skeleton/.github/` and set `ref` to
+`java-pipeline-v0.21.2`. Nothing else changes.
+
 ## [0.21.1] - 2026-11-14
 
 - Fixed: the independent review never ran. Its prompt began with the code-reviewer file's `---` front matter, and

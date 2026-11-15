@@ -198,6 +198,11 @@ case "$phase" in
     [[ -s "$agent_file" ]] || die "no code-reviewer definition at $agent_file (run the tools phase)"
     diff_file="$state/pr.diff"
     git -C "$PR_DIR" diff "origin/main...$SHA" > "$diff_file" || die "could not diff $SHA against origin/main"
+    if [[ ! -s "$diff_file" ]] && git -C "$PR_DIR" merge-base --is-ancestor "$SHA" origin/main; then
+      # Merged between pick and review: main already holds the head, so there is nothing left to review.
+      say "Not reviewed: $SHA is already on main (the pull request merged before its review ran)"
+      output verdict skipped; exit 0
+    fi
     [[ -s "$diff_file" ]] || die "could not produce the diff of $SHA"
     if (( $(wc -c < "$diff_file") > 400000 )); then
       say "Not reviewed: the diff is over 400000 bytes, too big for an unattended review"
