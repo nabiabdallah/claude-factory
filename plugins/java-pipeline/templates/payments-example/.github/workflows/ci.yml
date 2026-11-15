@@ -42,21 +42,29 @@ jobs:
 
       # Vulnerability scan of the exact image layers CI would push (claude-factory ADR 0009): fails on
       # HIGH/CRITICAL findings that have a fix. Exceptions go in .trivyignore.yaml with a reason and expiry.
-      - name: Build the image to a tarball (no push), unpacked as an OCI layout for the scanner
+      # One tarball per platform the image job pushes (claude-factory ADR 0034): Jib builds a tarball for one
+      # platform at a time, and the base image's packages differ between them.
+      - name: Build the image of each platform to a tarball (no push), unpacked as an OCI layout for the scanner
         run: |
-          ./mvnw -B -q -DskipTests compile jib:buildTar
-          mkdir -p target/oci-image && tar -xf target/jib-image.tar -C target/oci-image
+          for arch in amd64 arm64; do
+            ./mvnw -B -q -DskipTests compile jib:buildTar \
+              -Djib.from.platforms=linux/$arch -Djib.outputPaths.tar=target/jib-image-$arch.tar
+            mkdir -p target/oci-image-$arch && tar -xf target/jib-image-$arch.tar -C target/oci-image-$arch
+          done
         env:
           FACTORY_PACKAGES_TOKEN: ${{ secrets.FACTORY_PACKAGES_TOKEN }}
 
       - name: Install pinned, checksum-verified tools
         run: .github/scripts/ci-tools.sh trivy
 
-      - name: Scan the image (Trivy)
-        run: >
-          trivy image --input target/oci-image
-          --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed
-          --ignorefile .trivyignore.yaml --exit-code 1
+      - name: Scan the image of each platform (Trivy)
+        run: |
+          for arch in amd64 arm64; do
+            echo "== linux/$arch"
+            trivy image --input target/oci-image-$arch \
+              --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+              --ignorefile .trivyignore.yaml --exit-code 1
+          done
 
       - name: Keep the coverage report
         if: always()
@@ -96,8 +104,10 @@ jobs:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
 
   # Container image (claude-factory ADR 0007): only for pushes to main, after verify passed.
-  # Jib builds without a Docker daemon and pushes with this repo's own token. The pushed digest is
-  # signed keylessly (Sigstore, GitHub OIDC) and the SBOM is attached as a signed attestation.
+  # Jib builds without a Docker daemon and pushes with this repo's own token: one image per platform (amd64, and
+  # arm64 for the cluster's nodes, claude-factory ADR 0034) under one index, which is what the tags name. The
+  # index and each platform's image are signed keylessly (Sigstore, GitHub OIDC), and the SBOM, which is the same
+  # for every platform, is attached to the index as a signed attestation.
   image:
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -119,9 +129,10 @@ jobs:
           server-username-env-var: GITHUB_ACTOR
           server-password-env-var: FACTORY_PACKAGES_TOKEN
 
-      - name: Build and push ghcr.io image (tags <sha>, main)
+      - name: Build and push ghcr.io image (tags <sha>, main; linux/amd64 and linux/arm64)
         run: >
           ./mvnw -B -DskipTests package jib:build
+          -Djib.from.platforms=linux/amd64,linux/arm64
           -Djib.to.tags=${{ github.sha }},main
           -Djib.to.auth.username=${{ github.actor }}
           -Djib.to.auth.password=${{ github.token }}
@@ -131,13 +142,13 @@ jobs:
       - name: Install pinned, checksum-verified tools
         run: .github/scripts/ci-tools.sh cosign
 
-      - name: Sign the pushed digest and attest its SBOM
+      - name: Sign the pushed index and its images, and attest the SBOM
         env:
           REGISTRY_TOKEN: ${{ github.token }}
         run: |
           image=$(jq -r .image target/jib-image.json | sed 's/:[^/]*$//')
           ref="$image@$(cat target/jib-image.digest)"
           echo "$REGISTRY_TOKEN" | cosign login ghcr.io --username "${{ github.actor }}" --password-stdin
-          cosign sign --yes "$ref"
+          cosign sign --yes --recursive "$ref"
           cosign attest --yes --type cyclonedx --predicate target/classes/META-INF/sbom/application.cdx.json "$ref"
           echo "Signed $ref" >> "$GITHUB_STEP_SUMMARY"

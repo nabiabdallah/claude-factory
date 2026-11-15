@@ -1,0 +1,68 @@
+name: Promote
+
+# Opens the pull request that deploys (claude-factory ADRs 0012 and 0034): it sets one overlay's newTag to a commit
+# on the default branch. Start it by hand:
+#   gh workflow run promote.yml -f env=staging              the newest commit that has an image
+#   gh workflow run promote.yml -f env=prod -f commit=<sha> that commit (an older one is a rollback)
+# CI's `manifests` job judges the pull request (.github/scripts/check-deploy.sh); a person merges it. The cluster
+# then pulls the change, and post-deploy.yml reports the rollout.
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: The environment (an overlay in deploy/k8s/overlays)
+        type: choice
+        options: [staging, prod]
+        default: staging
+      commit:
+        description: The commit on the default branch to promote (empty = the newest one with an image)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-${{ inputs.env }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the promotion branch and its one commit
+      pull-requests: write # open the pull request
+      packages: read # ask the registry which commits have an image
+    env:
+      FACTORY_APP: ${{ secrets.FACTORY_APP_KEY != '' }}
+    steps:
+      # The default branch, whatever ref the run was started on: its script, its overlays, its history.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Sign in to the registry (read only)
+        run: echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+
+      # A token for this repository only, as the factory's App: a pull request opened with it starts CI.
+      - name: Mint an App token
+        id: app
+        if: env.FACTORY_APP == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.FACTORY_APP_CLIENT_ID || secrets.FACTORY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FACTORY_APP_KEY }}
+
+      - name: Open the promotion pull request
+        run: .github/scripts/deploy.sh promote
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          DEPLOY_PR_STARTS_CI: ${{ steps.app.outputs.token != '' }}
+          DEPLOY_ENV: ${{ inputs.env }}
+          DEPLOY_COMMIT: ${{ inputs.commit }}
+          DEPLOY_BASE_BRANCH: ${{ github.event.repository.default_branch }}
