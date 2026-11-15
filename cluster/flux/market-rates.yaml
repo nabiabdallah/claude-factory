@@ -1,0 +1,135 @@
+# market-rates on the cluster (factory ADR 0034): a namespace per environment, and Flux applying each
+# environment's overlay from the service's main branch. Merging a promotion pull request there is the deploy.
+# Flux applies the overlays as the service account below, which can change these two namespaces and nothing
+# else: a merged pull request in the service's repository can't reach the rest of the cluster.
+# Pods must meet the "restricted" pod security standard, which the templates' Deployment does.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: market-rates-staging
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: market-rates-prod
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: market-rates
+  namespace: flux-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flux-market-rates
+  namespace: market-rates-staging
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: ServiceAccount
+    name: market-rates
+    namespace: flux-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flux-market-rates
+  namespace: market-rates-prod
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: ServiceAccount
+    name: market-rates
+    namespace: flux-system
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: market-rates
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/nabiabdallah/market-rates
+  ref:
+    branch: main
+  # Only deploy/ is fetched into the artifact.
+  ignore: |
+    /*
+    !/deploy/
+---
+# wait + timeout are the post-deploy check: the rollout counts once the new pods are ready, and fails after 5 min.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: market-rates-staging
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  wait: true
+  prune: true
+  path: ./deploy/k8s/overlays/staging
+  targetNamespace: market-rates-staging
+  serviceAccountName: market-rates
+  sourceRef:
+    kind: GitRepository
+    name: market-rates
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: market-rates-prod
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  wait: true
+  prune: true
+  path: ./deploy/k8s/overlays/prod
+  targetNamespace: market-rates-prod
+  serviceAccountName: market-rates
+  sourceRef:
+    kind: GitRepository
+    name: market-rates
+---
+# The result of each rollout, as the commit status flux/market-rates-<env> on the commit Flux applied. The
+# service's post-deploy.yml turns a red one into an issue. The secret `github-status` (key `token`: a fine-grained
+# token with "Commit statuses: read and write" on the service repositories, nothing else) is created by the owner
+# on the VM; until it exists, rollouts happen and nothing is reported.
+apiVersion: notification.toolkit.fluxcd.io/v1
+kind: Provider
+metadata:
+  name: market-rates-status
+  namespace: flux-system
+spec:
+  type: github
+  address: https://github.com/nabiabdallah/market-rates
+  secretRef:
+    name: github-status
+  commitStatusExpr: "'flux/' + event.involvedObject.name"
+---
+apiVersion: notification.toolkit.fluxcd.io/v1
+kind: Alert
+metadata:
+  name: market-rates-status
+  namespace: flux-system
+spec:
+  providerRef:
+    name: market-rates-status
+  eventSeverity: info
+  eventSources:
+    - kind: Kustomization
+      name: market-rates-staging
+    - kind: Kustomization
+      name: market-rates-prod

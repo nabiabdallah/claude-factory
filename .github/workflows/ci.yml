@@ -337,6 +337,11 @@ jobs:
       - name: Install kubeconform (the templates' pinned, checksum-verified version)
         run: plugins/java-pipeline/templates/skeleton/.github/scripts/ci-tools.sh kubeconform
 
+      # The cluster's own configuration (factory ADR 0034): pinned bootstrap, cloud-init, and the Flux manifests,
+      # where each service is confined to its namespaces; schemas of Kubernetes and the pinned Flux release.
+      - name: Cluster bootstrap and Flux manifests
+        run: ci/check-cluster.sh
+
       - name: Render (kustomize) and validate (kubeconform -strict) every overlay, with and without Recreate; observability wiring
         run: |
           for t in skeleton payments-example; do

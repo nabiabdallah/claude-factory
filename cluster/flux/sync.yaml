@@ -1,0 +1,32 @@
+# Flux's source on this repository and the Kustomization that applies this directory, itself included.
+# cluster/bootstrap.sh applies this file once; after that a merged change under cluster/flux reaches the cluster
+# by itself. This Kustomization runs with Flux's own cluster-wide rights: everything here is `risk:high`.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: claude-factory
+  namespace: flux-system
+spec:
+  interval: 5m
+  url: https://github.com/nabiabdallah/claude-factory
+  ref:
+    branch: main
+  # Only cluster/ makes a new artifact.
+  ignore: |
+    /*
+    !/cluster/
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cluster
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 3m
+  prune: true
+  path: ./cluster/flux
+  sourceRef:
+    kind: GitRepository
+    name: claude-factory

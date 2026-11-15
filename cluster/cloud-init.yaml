@@ -1,0 +1,17 @@
+#cloud-config
+# First boot of the factory's cluster VM (factory ADR 0034; runbook: docs/CLUSTER.md). Paste this file as the
+# "cloud-init script" when creating the VM (Ubuntu 24.04, arm64). It downloads cluster/bootstrap.sh from this
+# repository's main branch and runs it: single-node k3s, Flux, and Flux pointed at cluster/flux. About five
+# minutes; the log is /var/log/claude-factory-bootstrap.log. It contains no secret.
+package_update: true
+packages:
+  - curl
+  - ca-certificates
+runcmd:
+  - - bash
+    - -c
+    - >-
+      set -o pipefail;
+      curl -sSfL --connect-timeout 20 --retry 5 --retry-all-errors -o /root/bootstrap.sh
+      https://raw.githubusercontent.com/nabiabdallah/claude-factory/main/cluster/bootstrap.sh
+      && bash /root/bootstrap.sh 2>&1 | tee /var/log/claude-factory-bootstrap.log

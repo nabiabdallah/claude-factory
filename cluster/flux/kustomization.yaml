@@ -1,0 +1,7 @@
+# What Flux applies to the cluster from this repository (factory ADR 0034): its own source, and one file per
+# service. To register a service, add its file here (copy market-rates.yaml); ci/check-cluster.sh checks it.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - sync.yaml
+  - market-rates.yaml

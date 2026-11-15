@@ -36,6 +36,20 @@ The owner approved these on 2026-11-15 (`docs/plans/C1.md`, all seven recommenda
   service's namespaces. The owner creates the VM from it in the Oracle console.
 - **No public ingress yet.** market-rates is reached over an SSH port-forward.
 
+## The cluster side (second half of C1)
+- **`cluster/bootstrap.sh`** makes a fresh Ubuntu arm64 VM the cluster: k3s v1.36.6 and Flux v2.10.0, each pinned
+  by version and sha256, no ingress controller and no service load balancer. `cluster/cloud-init.yaml` runs it at
+  first boot from this repository's `main`. It holds no credential.
+- **`cluster/flux/`** is what Flux applies from this repository, itself included: one file per service. A service
+  gets a namespace per environment (pods held to the "restricted" standard) and a service account that is admin
+  of those namespaces only; Flux applies the service's overlays as that account, so a merged pull request in a
+  service's repository can't reach the rest of the cluster. The directory itself is applied with Flux's
+  cluster-wide rights, which is why `cluster/` is `risk:high`.
+- **The status is named by us:** `commitStatusExpr` makes it `flux/<service>-<env>`. Without it Flux 2.10 would
+  post `kustomization/<name>/<provider uid>`, which `post-deploy.yml` also accepts.
+- **`ci/check-cluster.sh`** checks the pins, the firewall edit, and that every registered service is confined and
+  reported; in CI also the schemas of Kubernetes and of the pinned Flux release.
+
 ## Alternatives considered
 - **A CD job in Actions that runs `kubectl apply`:** GitHub would hold a credential that can change the cluster,
   and the cluster's API would have to be reachable from GitHub's runners.
