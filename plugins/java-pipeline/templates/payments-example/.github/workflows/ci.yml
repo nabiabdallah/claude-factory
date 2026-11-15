@@ -107,7 +107,8 @@ jobs:
   # Jib builds without a Docker daemon and pushes with this repo's own token: one image per platform (amd64, and
   # arm64 for the cluster's nodes, claude-factory ADR 0034) under one index, which is what the tags name. The
   # index and each platform's image are signed keylessly (Sigstore, GitHub OIDC), and the SBOM, which is the same
-  # for every platform, is attached to the index as a signed attestation.
+  # for every platform, is attached to the index as a signed attestation. The push uses Docker's manifest format:
+  # Jib can't build an OCI index yet. claude-factory's CI makes this same push to a throwaway registry.
   image:
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -132,7 +133,7 @@ jobs:
       - name: Build and push ghcr.io image (tags <sha>, main; linux/amd64 and linux/arm64)
         run: >
           ./mvnw -B -DskipTests package jib:build
-          -Djib.from.platforms=linux/amd64,linux/arm64
+          -Djib.from.platforms=linux/amd64,linux/arm64 -Djib.container.format=Docker
           -Djib.to.tags=${{ github.sha }},main
           -Djib.to.auth.username=${{ github.actor }}
           -Djib.to.auth.password=${{ github.token }}

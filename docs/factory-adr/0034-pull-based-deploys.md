@@ -29,7 +29,9 @@ The owner approved these on 2026-11-15 (`docs/plans/C1.md`, all seven recommenda
   factory's App. `check-deploy.sh` judges it like a hand-made one, and deploy files stay `risk:high`: a person
   merges every promotion.
 - **Images are built for `linux/amd64` and `linux/arm64`** under one tag, by a flag in the service's CI (no
-  factory-parent release). cosign signs the index and both images; Trivy scans both.
+  factory-parent release). cosign signs the index and both images; Trivy scans both. The push is in Docker's
+  manifest format (amended 2026-11-15, 0.22.1): Jib 3.5 refuses to build an OCI index, which 0.22.0's first real
+  push showed. Factory CI now makes that push to a throwaway registry.
 - **Staging and prod are two namespaces on the one VM**, with the overlays as they are.
 - **The cluster's own configuration lives in `cluster/` of claude-factory** (second half of C1): the VM's
   cloud-init, and one file per service that registers it with Flux under a service account limited to that

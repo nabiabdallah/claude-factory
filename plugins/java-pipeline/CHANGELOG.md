@@ -5,6 +5,19 @@ All notable changes to the plugin, newest first ([Keep a Changelog](https://keep
 Each version is tagged `java-pipeline-vX.Y.Z`; projects pin the tag in `.claude/settings.json` (`ref`).
 Decisions are in `docs/factory-adr/`.
 
+## [0.22.1] - 2026-11-15
+
+- Fixed: the `image` job of 0.22.0 failed on its first push to `main` ("Build an OCI image index is not yet
+  supported", market-rates run 43760479499). Jib builds a multi-platform image only in Docker's manifest format,
+  so the push now passes `-Djib.container.format=Docker`. The image's content, tags and signatures are as
+  described for 0.22.0; the tarballs that are scanned stay OCI.
+- In claude-factory: CI now makes the same two-platform push, with the flags read from the template's `ci.yml`,
+  to a throwaway registry, and checks that both platforms are under the tag. Before, nothing pushed.
+
+**Upgrading:** copy `ci.yml` (`.github/workflows/`) from `templates/skeleton/.github/` and set `ref` to
+`java-pipeline-v0.22.1`. A commit whose `image` job failed under 0.22.0 has no image: the next push to `main`
+builds one.
+
 ## [0.22.0] - 2026-11-15
 
 First half of roadmap step C1, a real cluster (factory ADR 0034): what a service needs to be deployed by a cluster

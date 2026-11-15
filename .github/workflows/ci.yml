@@ -154,6 +154,25 @@ jobs:
             ls -l target/jib-image-$arch.tar
           done
 
+      # The push a service's image job makes (factory ADR 0034), with the same Jib flags, to a registry that lives
+      # for this step: both platforms arrive under one tag, and the digest file names that index. 0.22.0 shipped
+      # a push that Jib refuses (an OCI index), because nothing here pushed.
+      - name: Push the skeleton image for both platforms to a throwaway registry
+        working-directory: plugins/java-pipeline/templates/skeleton
+        run: |
+          docker run -d --name registry -p 127.0.0.1:5000:5000 \
+            registry@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c
+          flags="$(tr -s '\n ' ' ' < .github/workflows/ci.yml | grep -oE 'jib:build( -Djib\.[a-z.]+=[A-Za-z0-9/,]+)+' | cut -d' ' -f2-)"
+          echo "the image job's flags: $flags"
+          ./mvnw -B -q -DskipTests package jib:build $flags \
+            -Djib.to.image=localhost:5000/app-skeleton -Djib.to.tags=test,main -Djib.allowInsecureRegistries=true
+          digest="$(cat target/jib-image.digest)"
+          for ref in ":test" ":main" "@$digest"; do
+            docker manifest inspect --insecure "localhost:5000/app-skeleton$ref" > "$RUNNER_TEMP/index.json"
+            jq -e '[.manifests[].platform | "\(.os)/\(.architecture)"] | sort == ["linux/amd64", "linux/arm64"]' "$RUNNER_TEMP/index.json"
+          done
+          docker rm -f registry
+
       - name: Supply-chain checks (SHA-pinned actions, base digest, pinned tools, SBOM)
         run: ci/check-supply-chain.sh plugins/java-pipeline/templates/skeleton
 
