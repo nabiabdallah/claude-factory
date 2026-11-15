@@ -90,13 +90,14 @@ there. Use the owner's machine for steps that change the templates or factory-pa
   EUR/USDT, Nvidia, SPY, all from Binance's keyless API) were built by the factory and merged (PRs #5, #11). Next
   for it: C1. Review follow-ups from PR #11: spec 0002 criterion 11 says failure logs carry the asset id, the code
   (like spot) logs provider and status only; the context test doesn't check both poll tasks are registered.
-- **C1 step 3: create the VM and the status token**, following [CLUSTER.md](CLUSTER.md) (about 20 minutes). Then
-  say so, and a session runs the acceptance (step 4).
-- **C1: create the Oracle Cloud account** (a card is needed for verification; nothing is charged within the free
-  limits; upgrading to Pay As You Go, still free, stops Oracle reclaiming an idle VM) in an EU region.
-- (done) C1's plan approved 2026-11-15, all seven recommendations ([plans/C1.md](plans/C1.md), ADR 0034).
-- **C1: after 0.22.0 merges**, merge the upgrade PR a session opens on market-rates (workflow files, `risk:high`).
-  The first push to its `main` after that is the first real multi-platform image push: check the `image` job.
+- **C1 step 3: create the VM and the status token**, following [CLUSTER.md](CLUSTER.md) §1 and §2 (about 20
+  minutes). A session can't: it has no Oracle login, and GitHub only issues the token in your browser. Then say
+  so, and a session runs the acceptance (step 4).
+- (done 2026-11-15) Oracle Cloud account created. C1's plan approved, all seven recommendations
+  ([plans/C1.md](plans/C1.md), ADR 0034).
+- (done 2026-11-15) market-rates is on java-pipeline 0.22.1 (PRs #12, #13); its `image` job pushed, signed and
+  attested the two-platform image (run 43761587639). `promote.yml` opened the first promotions as the App; staging
+  and prod are both at `82b7428` (PRs #14, #15), waiting for a cluster to pull them.
 - **Set `CLAUDE_TOKEN_EXPIRES`** (YYYY-MM-DD) to when the Claude token's year ends; the weekly digest warns from it.
 - (done) B7 merged; the first digest posted to inbox issue #36; template-drift PRs to services wait (ADR 0032).
 - (done) Merging B6's PR started step B7 unattended.
