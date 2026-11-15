@@ -13,7 +13,7 @@
 #     pack      everything committed, a report written; hand over a git bundle of the commits and the report
 #   gate job     (a fresh checkout of the base commit, read-only token: this script is the one the owner merged)
 #     unpack    the bundle holds commits on top of the base
-#     gate      spec: exactly one new, complete spec file. build: protected files untouched, `./mvnw verify` green
+#     gate      spec: exactly one new, complete spec file. build: protected files untouched, the build green
 #   publish job  (a fresh checkout of the base commit, the write token; it builds nothing)
 #     unpack, gate (checks only, no build), publish   push the gated commit and open the pull request
 #   report job   tell the issue which phase stopped the run
@@ -23,6 +23,18 @@
 #                start the build run
 # State is kept between phases in $FACTORY_STATE. Tested with a fake `gh` and a stand-in agent by
 # claude-factory's ci/test-factory-run.sh.
+#
+# One runner serves every pipeline plugin. What differs per project is in .github/factory.conf, always read as
+# committed on the base commit, never from the agent's tree. Without the file the values are these, a Java
+# service of the java-pipeline plugin:
+#   plugin=java-pipeline                  the plugin whose skills run, and whose release .claude/settings.json pins
+#   verify=./mvnw -B -q verify            the build that must be green: a command and its arguments, no shell syntax
+#   protected=.mvn/* mvnw mvnw.cmd src/test/resources/archunit.properties src/test/java/*/ArchitectureTest.java
+#                                         files only the owner changes, besides the ones every project protects
+#                                         (space-separated patterns; * also matches /)
+#   tests=src/test                        where the tests are: a run may not delete files there
+#   build_file=pom.xml                    the build file, and what a line added to it may not contain (an
+#   build_weaken=factory\.coverage|...    extended regular expression): build rules can't be loosened to get green
 set -euo pipefail
 
 # Dependabot can't update this: bump it together with the plugin release the project is pinned to.
@@ -33,6 +45,29 @@ state="${FACTORY_STATE:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}/factory-run}"
 mkdir -p "$state"
 
 die() { echo "factory-run: $*" >&2; echo "$*" > "$state/failure"; exit 1; }
+conf() { # conf <commit> <key>: the project's value in .github/factory.conf as committed there, or the default
+  local file line key value found=0
+  case "$2" in
+    plugin) value=java-pipeline ;;
+    verify) value='./mvnw -B -q verify' ;;
+    protected) value='.mvn/* mvnw mvnw.cmd src/test/resources/archunit.properties src/test/java/*/ArchitectureTest.java' ;;
+    tests) value=src/test ;;
+    build_file) value=pom.xml ;;
+    build_weaken) value='factory\.coverage|enforcer\.skip|jacoco\.skip|skipTests|maven\.test\.skip|<excludes?>' ;;
+  esac
+  file="$(git show "$1:.github/factory.conf" 2>/dev/null || true)"
+  while IFS= read -r line; do
+    [[ -n "$line" && "$line" != \#* ]] || continue
+    key="${line%%=*}"
+    case "$key" in
+      plugin|verify|protected|tests|build_file|build_weaken) ;;
+      *) die ".github/factory.conf: unknown line '$line' (keys: plugin, verify, protected, tests, build_file, build_weaken)" ;;
+    esac
+    [[ "$key" != "$2" ]] || { value="${line#*=}"; found=1; }
+  done <<<"$file"
+  [[ $found -eq 0 || -n "$value" ]] || die ".github/factory.conf: '$2' is empty"
+  echo "$value"
+}
 need() { local v; for v in "$@"; do [[ -n "${!v:-}" ]] || die "$v is not set"; done; }
 saved() { [[ -s "$state/$1" ]] || die "no '$1' from an earlier phase (run the phases in order)"; cat "$state/$1"; }
 output() { [[ -z "${GITHUB_OUTPUT:-}" ]] || echo "$1=$2" >> "$GITHUB_OUTPUT"; }
@@ -63,9 +98,11 @@ case "$phase" in
     fi
 
     # The project is pinned to a plugin release (claude-factory ADR 0015); the run uses exactly that one.
+    plugin="$(conf HEAD plugin)"
+    [[ "$plugin" =~ ^[a-z][a-z0-9-]*$ ]] || die ".github/factory.conf: '$plugin' is not a plugin name"
     ref="$(jq -r '.extraKnownMarketplaces["claude-factory"].source.ref // empty' .claude/settings.json 2>/dev/null || true)"
-    [[ "$ref" =~ ^java-pipeline-v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-      || die ".claude/settings.json does not pin the plugin (extraKnownMarketplaces.claude-factory.source.ref = java-pipeline-vX.Y.Z)"
+    [[ "$ref" =~ ^$plugin-v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+      || die ".claude/settings.json does not pin the plugin (extraKnownMarketplaces.claude-factory.source.ref = $plugin-vX.Y.Z)"
 
     case "${FACTORY_LABEL:-factory:build}" in
       factory:build)
@@ -102,6 +139,7 @@ case "$phase" in
     echo "$mode" > "$state/mode"
     echo "$branch" > "$state/branch"
     echo "$ref" > "$state/plugin-ref"
+    echo "$plugin" > "$state/plugin"
     git rev-parse HEAD > "$state/base"
     git rev-parse --abbrev-ref HEAD > "$state/base-branch"
     # What the later jobs need, fixed before the agent runs.
@@ -111,18 +149,18 @@ case "$phase" in
     ;;
 
   tools)
-    ref="$(saved plugin-ref)"
+    ref="$(saved plugin-ref)"; plugin="$(saved plugin)"
     npm install --global --no-fund --no-audit "@anthropic-ai/claude-code@$claude_code_version"
     rm -rf "$state/claude-factory"
     git clone --quiet --depth 1 --branch "$ref" "${FACTORY_PLUGIN_REPO:-https://github.com/nabiabdallah/claude-factory}" \
       "$state/claude-factory"
-    [[ -f "$state/claude-factory/plugins/java-pipeline/.claude-plugin/plugin.json" ]] || die "no java-pipeline plugin at $ref"
+    [[ -f "$state/claude-factory/plugins/$plugin/.claude-plugin/plugin.json" ]] || die "no $plugin plugin at $ref"
     ;;
 
   agent)
     need ISSUE_NUMBER
-    mode="$(saved mode)"; branch="$(saved branch)"
-    plugin="${FACTORY_PLUGIN_DIR:-$state/claude-factory/plugins/java-pipeline}"
+    mode="$(saved mode)"; branch="$(saved branch)"; name="$(saved plugin)"
+    plugin="${FACTORY_PLUGIN_DIR:-$state/claude-factory/plugins/$name}"
     [[ -d "$plugin" ]] || die "plugin directory $plugin not found (run the tools phase)"
     [[ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}${ANTHROPIC_API_KEY:-}${FACTORY_AGENT_CMD:-}" ]] \
       || die "no Claude credential: set the repository secret CLAUDE_CODE_OAUTH_TOKEN (from 'claude setup-token') or ANTHROPIC_API_KEY"
@@ -136,9 +174,9 @@ case "$phase" in
     rm -f "$FACTORY_REPORT"
     if [[ "$mode" == spec ]]; then
       export FACTORY_IDEA="$state/idea.md"
-      prompt="/java-pipeline:intake Headless run for issue #$ISSUE_NUMBER. The idea is in the file $FACTORY_IDEA. Follow the skill's \"Headless runs\" section. Write the report to $FACTORY_REPORT."
+      prompt="/$name:intake Headless run for issue #$ISSUE_NUMBER. The idea is in the file $FACTORY_IDEA. Follow the skill's \"Headless runs\" section. Write the report to $FACTORY_REPORT."
     else
-      prompt="/java-pipeline:new-feature Headless run for issue #$ISSUE_NUMBER. Implement the approved spec $(saved spec). Follow the skill's \"Headless runs\" section. Write the hand-off report to $FACTORY_REPORT."
+      prompt="/$name:new-feature Headless run for issue #$ISSUE_NUMBER. Implement the approved spec $(saved spec). Follow the skill's \"Headless runs\" section. Write the hand-off report to $FACTORY_REPORT."
     fi
     # No person can answer a permission prompt, so nothing asks. What limits the agent instead: it holds no
     # token that can write to GitHub, and the gate phase refuses changes to protected files.
@@ -233,24 +271,31 @@ case "$phase" in
       exit 0
     fi
 
-    # Files only the owner changes: CI and this runner, agent rules and permissions, the architecture rules,
-    # the build wrapper, deploy promotions, scan exceptions and specs.
+    # Files only the owner changes. In every project: CI and this runner (with factory.conf), agent rules and
+    # permissions, deploy promotions, scan exceptions and specs. Per project (factory.conf on the base commit; the
+    # defaults are a Java service's): the architecture rules and the build wrapper.
+    verify="$(conf "$base" verify)"; protected="$(conf "$base" protected)"; tests="$(conf "$base" tests)"
+    build_file="$(conf "$base" build_file)"; build_weaken="$(conf "$base" build_weaken)"
+    [[ "$tests$build_file" != *..* && "$tests" != /* && "$build_file" != /* ]] || die ".github/factory.conf: tests and build_file are paths inside the project"
+    read -r -a patterns <<<"$protected"
     while IFS= read -r f; do
       [[ -n "$f" ]] || continue
       case "$f" in
-        .github/*|.claude/*|.mvn/*|mvnw|mvnw.cmd|CLAUDE.md|.trivyignore.yaml|.gitignore|deploy/k8s/overlays/*|docs/specs/*|\
-        src/test/resources/archunit.properties|src/test/java/*/ArchitectureTest.java)
-          problems+=("changed a protected file: $f") ;;
+        .github/*|.claude/*|CLAUDE.md|.trivyignore.yaml|.gitignore|deploy/k8s/overlays/*|docs/specs/*)
+          problems+=("changed a protected file: $f"); continue ;;
       esac
+      for pattern in "${patterns[@]}"; do
+        # shellcheck disable=SC2053  # the right side is a pattern on purpose
+        if [[ "$f" == $pattern ]]; then problems+=("changed a protected file: $f"); break; fi
+      done
     done < <(git diff --name-only "$base..HEAD")
 
-    deleted="$(git diff --diff-filter=D --name-only "$base..HEAD" -- src/test)"
+    deleted="$(git diff --diff-filter=D --name-only "$base..HEAD" -- "$tests")"
     [[ -z "$deleted" ]] || problems+=("deleted tests: $(tr '\n' ' ' <<<"$deleted")")
 
     # Build rules can't be loosened to get green (claude-factory ADR 0013).
-    weakened="$(git diff "$base..HEAD" -- pom.xml | grep -E '^\+[^+]' \
-      | grep -E 'factory\.coverage|enforcer\.skip|jacoco\.skip|skipTests|maven\.test\.skip|<excludes?>' || true)"
-    [[ -z "$weakened" ]] || problems+=("pom.xml loosens a build rule: $(tr -s ' \n' ' ' <<<"$weakened")")
+    weakened="$(git diff "$base..HEAD" -- "$build_file" | grep -E '^\+[^+]' | grep -E -- "$build_weaken" || true)"
+    [[ -z "$weakened" ]] || problems+=("$build_file loosens a build rule: $(tr -s ' \n' ' ' <<<"$weakened")")
 
     if [[ ${#problems[@]} -gt 0 ]]; then
       printf 'factory-run: %s\n' "${problems[@]}" >&2
@@ -261,9 +306,10 @@ case "$phase" in
     # agent's code, so it runs in the gate job, which holds no token that can write. The publish job repeats the
     # checks above with FACTORY_GATE_BUILD=0 and builds nothing.
     if [[ "${FACTORY_GATE_BUILD:-1}" != 0 ]]; then
-      if ! ${FACTORY_VERIFY_CMD:-./mvnw -B -q verify} > "$state/verify.log" 2>&1; then
+      read -r -a verify_cmd <<<"${FACTORY_VERIFY_CMD:-$verify}"
+      if ! "${verify_cmd[@]}" > "$state/verify.log" 2>&1; then
         tail -n 60 "$state/verify.log" >&2
-        die "./mvnw verify is red on the agent's change"
+        die "the build (${verify_cmd[*]}) is red on the agent's change"
       fi
       [[ -z "$(git status --porcelain)" ]] || die "the build changed tracked files (formatting not applied before commit?)"
     fi
@@ -296,11 +342,11 @@ case "$phase" in
         next="It has open questions, so it says \`- Status: Draft\`. Answer them in the file, set \`- Status: Approved\`, then merge: that approves it and starts the build."
         todo="Answer its open questions in the file, set \`- Status: Approved\` and merge"
       fi
-      footer="$(printf 'Adds `%s`, drafted unattended from issue #%s by the java-pipeline factory run%s. %s\n\nRefs #%s' "$spec" "$ISSUE_NUMBER" "$run" "$next" "$ISSUE_NUMBER")"
+      footer="$(printf 'Adds `%s`, drafted unattended from issue #%s by the %s factory run%s. %s\n\nRefs #%s' "$spec" "$ISSUE_NUMBER" "$(conf "$(saved base)" plugin)" "$run" "$next" "$ISSUE_NUMBER")"
       done_note="Spec drafted: PR_URL adds \`$spec\`. $todo: the build then starts by itself (the label \`factory:build\` is put on this issue for you)."
     else
       pr_title="feat: $title (#$ISSUE_NUMBER)"
-      footer="$(printf 'Spec: `%s`. Built unattended by the java-pipeline factory run%s; `./mvnw verify` was green on this commit.\n\nCloses #%s' "$spec" "$run" "$ISSUE_NUMBER")"
+      footer="$(printf 'Spec: `%s`. Built unattended by the %s factory run%s; `%s` was green on this commit.\n\nCloses #%s' "$spec" "$(conf "$(saved base)" plugin)" "$run" "$(conf "$(saved base)" verify)" "$ISSUE_NUMBER")"
       done_note="Factory run finished: PR_URL is ready for review."
     fi
     { cat "$state/report.md"; printf '\n\n---\n%s\n' "$footer"; } > "$state/pr-body.md"

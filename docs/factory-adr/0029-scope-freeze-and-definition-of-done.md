@@ -47,3 +47,8 @@ The owner froze the scope on 2026-11-14.
 - The owner moved the frontend pipeline forward: it may be planned and built during the week of unattended
   maintenance, which is mostly waiting. It is a separate plugin and must not change market-rates or the
   maintenance setup that week. It still needs its own plan and the owner's OK.
+
+## Amendment (2026-11-15, later): the frontend pipeline starts while C1 waits for its VM
+- The owner approved the frontend plan and said to start now ([ADR 0035](0035-web-pipeline.md)): the cluster's VM
+  is waiting for capacity at Oracle, and that wait is as idle as the maintenance week would be. C1's acceptance
+  still comes first once the VM exists.
