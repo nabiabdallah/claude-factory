@@ -91,8 +91,9 @@ there. Use the owner's machine for steps that change the templates or factory-pa
   for it: C1. Review follow-ups from PR #11: spec 0002 criterion 11 says failure logs carry the asset id, the code
   (like spot) logs provider and status only; the context test doesn't check both poll tasks are registered.
 - **C1: create the Oracle Cloud account** (a card is needed for verification; nothing is charged within the free
-  limits; upgrading to Pay As You Go, still free, stops Oracle reclaiming an idle VM) in an EU region. The C1
-  session then writes the plan.
+  limits; upgrading to Pay As You Go, still free, stops Oracle reclaiming an idle VM) in an EU region.
+- **C1: OK the plan** in [plans/C1.md](plans/C1.md) (written 2026-11-15): seven choices, each with a
+  recommendation. Nothing is built before that.
 - **Set `CLAUDE_TOKEN_EXPIRES`** (YYYY-MM-DD) to when the Claude token's year ends; the weekly digest warns from it.
 - (done) B7 merged; the first digest posted to inbox issue #36; template-drift PRs to services wait (ADR 0032).
 - (done) Merging B6's PR started step B7 unattended.
