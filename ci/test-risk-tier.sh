@@ -165,6 +165,11 @@ cwd="$(cat "$FAKE_GH/agent-cwd")"
 [[ "$args" == *"--add-dir $pr --setting-sources user --strict-mcp-config"* ]] && ok "review: the checkout is data only (no project settings, hooks or MCP servers)" || bad "review: the PR's settings could load: $args"
 grep -q 'APPROVE' "$work/state/review.md" && ok "review: review.md written" || bad "review: no review.md"
 env -u FACTORY_AGENT_CMD -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY SHA="$real_sha" "$script" review >/dev/null 2>&1 && bad "review: ran with no credential" || ok "review: no credential, no run"
+merged_dir="$work/mergedpr"; git clone -q "$pr" "$merged_dir"; git -C "$merged_dir" update-ref refs/remotes/origin/main "$real_sha"
+outputs; rm -f "$FAKE_GH/agent-args"
+PR_DIR="$merged_dir" SHA="$real_sha" SCENARIO=approve rt review >/dev/null 2>&1 && verdict_is skipped && [[ ! -f "$FAKE_GH/agent-args" ]] \
+  && ok "review: a head already on main (merged before its review ran) is skipped, not a failure" || bad "review: a head already on main failed or was reviewed"
+unset GITHUB_OUTPUT
 
 # merge
 domerge() { VERDICT="${VERDICT:-approve}" rt merge > "$work/mout" 2>&1; }

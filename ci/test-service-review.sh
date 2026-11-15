@@ -188,6 +188,12 @@ for i in $(seq 9000); do echo "line $i of a very long generated file that makes 
 git -C "$big" add docs-big.md; git -C "$big" -c user.name=t -c user.email=t@example.invalid commit -qm big
 PR_DIR="$big" PR=7 SHA="$(git -C "$big" rev-parse HEAD)" TIER=high SCENARIO=approve rt review >/dev/null 2>&1 || true
 out_is verdict=skipped && [[ ! -f "$FAKE_GH/agent-args" ]] && [[ ! -f "$work/state/review.md" ]] && ok "review: a diff over 400 kB is not reviewed (skipped, nothing to post)" || bad "review: reviewed a huge diff"
+outputs; rm -f "$FAKE_GH/agent-args" "$work/state/review.md"
+merged="$work/mergedpr"; git clone -q "$pr" "$merged"; head_sha="$(git -C "$merged" rev-parse HEAD)"
+git -C "$merged" update-ref refs/remotes/origin/main "$head_sha"
+PR_DIR="$merged" PR=7 SHA="$head_sha" TIER=high SCENARIO=approve rt review >/dev/null 2>&1 \
+  && out_is verdict=skipped && [[ ! -f "$FAKE_GH/agent-args" ]] && [[ ! -f "$work/state/review.md" ]] \
+  && ok "review: a head already on main (merged before its review ran) is skipped, not a failure" || bad "review: a head already on main failed or was reviewed"
 unset GITHUB_OUTPUT
 
 # --- comment: one per PR, replaced on a new head
