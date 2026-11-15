@@ -156,7 +156,8 @@ image (`-f commit=<sha>` for another). A release that crosses a `-- rollout: rec
 `components/recreate` in that overlay (CI tells you).
 
 How the merged PR reaches the cluster ([ADR 0034](factory-adr/0034-pull-based-deploys.md)):
-- **A cluster with Flux** pulls it within about a minute; GitHub holds no cluster credentials. Flux posts the
+- **The factory's cluster** ([CLUSTER.md](CLUSTER.md): how it is built, and how a service is registered with it)
+  runs Flux, which pulls it within about a minute; GitHub holds no cluster credentials. Flux posts the
   commit status `flux/customer-service-<env>` on the merge commit. A red one opens the issue "Deploy failed: …" in
   the service's repo, and the next green one closes it.
 - **Any other cluster:** `kubectl apply -k deploy/k8s/overlays/<env>`.

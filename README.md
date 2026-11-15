@@ -23,7 +23,9 @@ claude-factory/
 │       ├── skeleton/                    default: empty hexagonal service
 │       └── payments-example/            the original payments starter, as a worked example
 ├── parents/factory-parent/             shared Maven build every service inherits (GitHub Packages)
+├── cluster/                            the cluster: VM bootstrap (k3s, Flux) and each service's registration
 ├── docs/ONBOARDING.md                   empty machine → deployed change
+├── docs/CLUSTER.md                      the cluster's runbook
 ├── docs/factory-adr/                    decisions about the factory itself
 ├── ci/                                 factory CI checks (supply chain, deploy gate, build rules, releases, docs, unattended runs)
 └── README.md

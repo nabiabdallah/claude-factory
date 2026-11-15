@@ -51,6 +51,8 @@ expect high "the classifier script"          me "ci" .github/scripts/risk-tier.s
 expect high "the classifier workflow"        me "ci" .github/workflows/risk-tier.yml
 expect high "the auto-merge workflow"        me "ci" .github/workflows/auto-merge.yml
 expect high "the classifier's test"          me "ci" ci/test-risk-tier.sh
+expect high "the cluster's Flux manifests"   me "cluster" cluster/flux/market-rates.yaml
+expect high "the cluster's bootstrap"        me "cluster" cluster/bootstrap.sh cluster/cloud-init.yaml
 expect high "a path nobody listed"           me "misc" scripts/new-thing.sh
 expect high "a main source file"             me "feat" plugins/java-pipeline/templates/skeleton/src/main/java/com/x/Greeting.java
 expect high "low and high mixed"             me "mixed" docs/ONBOARDING.md .github/workflows/ci.yml
