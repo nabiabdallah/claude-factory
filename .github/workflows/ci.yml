@@ -362,7 +362,21 @@ jobs:
           if-no-files-found: error
 
       - name: Verify (typecheck, lint, architecture rules, tests with coverage, build, bundle budget)
+        id: verify
         run: npm run verify
+
+      # `npm run verify` stops at the first failing stage. When it fails, run every stage on its own and print the
+      # changes Prettier wants, so one run shows everything to fix. The job stays failed; nothing is committed.
+      - name: Verify failed? Every stage on its own, and Prettier's diff
+        if: failure() && steps.verify.outcome == 'failure'
+        run: |
+          for stage in typecheck lint arch test build bundle; do
+            echo "::group::npm run $stage"
+            npm run "$stage" || echo "::error::npm run $stage failed"
+            echo "::endgroup::"
+          done
+          npx prettier --write . >/dev/null
+          git diff -- .
 
       - name: No known high or critical vulnerability in the dependencies
         run: npm audit --audit-level=high
