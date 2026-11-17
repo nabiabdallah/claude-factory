@@ -2,7 +2,7 @@
 # Tests ci/protect-repo.sh (factory ADR 0016) without touching GitHub: the --dry-run requests are checked with jq
 # against the guardrails the owner approved, the required check names against the real workflow jobs, and the
 # apply path against a fake `gh` (refuses a private repo or an unknown App; creates a missing ruleset, updates an
-# existing one; looks up the App id).
+# existing one; refuses a missing or non-numeric App id).
 #   ci/test-protect-repo.sh        (from the repo root; needs jq)
 set -euo pipefail
 
@@ -33,8 +33,6 @@ printf 'READ %s\n' "$*" >> "$log"
 case "$*" in
   "api repos/acme/demo") printf '{"visibility":"%s"}\n' "$FAKE_VISIBILITY" ;;
   "api repos/acme/demo/rulesets?includes_parents=false") printf '%s\n' "$FAKE_RULESETS" ;;
-  "api repos/acme/demo/actions/variables/FACTORY_APP_SLUG") echo '{"name":"FACTORY_APP_SLUG","value":"factory-bot"}' ;;
-  "api apps/factory-bot") printf '%s\n' "${FAKE_APP:-{\"id\":4242,\"slug\":\"factory-bot\"\}}" ;;
   *) echo "fake gh: unexpected call: $*" >&2; exit 1 ;;
 esac
 GH
@@ -147,24 +145,29 @@ if FAKE_VISIBILITY=private FAKE_RULESETS='[]' PATH="$work/bin:$PATH" ci/protect-
 fi
 
 : > "$FAKE_GH_LOG"
-FAKE_VISIBILITY=public FAKE_RULESETS='[]' PATH="$work/bin:$PATH" ci/protect-repo.sh acme/demo factory >/dev/null
+FACTORY_APP_ID=4242 FAKE_VISIBILITY=public FAKE_RULESETS='[]' PATH="$work/bin:$PATH" ci/protect-repo.sh acme/demo factory >/dev/null
 if grep -q -- '--method POST repos/acme/demo/rulesets' "$FAKE_GH_LOG" \
    && [[ "$(grep -c -- '--method POST repos/acme/demo/rulesets' "$FAKE_GH_LOG")" -eq 3 ]]; then
   ok "missing rulesets are created (POST x3)"
 else bad "missing rulesets are created (POST x3)"; sed 's/^/    /' "$FAKE_GH_LOG"; fi
-if grep -qx 'READ api apps/factory-bot' "$FAKE_GH_LOG" && grep -q '"actor_id":4242,"actor_type":"Integration"' <(tr -d ' \n' < "$FAKE_GH_LOG"); then
-  ok "the App id is looked up from FACTORY_APP_SLUG"
-else bad "the App id is looked up from FACTORY_APP_SLUG"; sed 's/^/    /' "$FAKE_GH_LOG"; fi
+if grep -q '"actor_id":4242,"actor_type":"Integration"' <(tr -d ' \n' < "$FAKE_GH_LOG"); then
+  ok "the App id comes from FACTORY_APP_ID"
+else bad "the App id comes from FACTORY_APP_ID"; sed 's/^/    /' "$FAKE_GH_LOG"; fi
 
+for bad_id in "" "Iv23abc" "12x"; do
+  : > "$FAKE_GH_LOG"
+  if FACTORY_APP_ID="$bad_id" FAKE_VISIBILITY=public FAKE_RULESETS='[]' PATH="$work/bin:$PATH" \
+      ci/protect-repo.sh acme/demo factory >/dev/null 2>&1; then bad "App id '$bad_id' refused"; else
+    if grep -q -- '--method' "$FAKE_GH_LOG"; then bad "App id '$bad_id': nothing written"; else ok "App id '$bad_id' refused, nothing written"; fi
+  fi
+done
 : > "$FAKE_GH_LOG"
-if FAKE_APP='{"message":"Not Found"}' FAKE_VISIBILITY=public FAKE_RULESETS='[]' PATH="$work/bin:$PATH" \
-    ci/protect-repo.sh acme/demo factory >/dev/null 2>&1; then bad "unknown App id refused"; else
-  if grep -q -- '--method' "$FAKE_GH_LOG"; then bad "unknown App id: nothing written"; else ok "unknown App id refused, nothing written"; fi
-fi
+FAKE_VISIBILITY=public FAKE_RULESETS='[]' PATH="$work/bin:$PATH" ci/protect-repo.sh acme/demo service >/dev/null \
+  && ok "service needs no App id" || bad "service needs no App id"
 
 : > "$FAKE_GH_LOG"
 FAKE_VISIBILITY=public FAKE_RULESETS='[{"id":11,"name":"main"},{"id":12,"name":"release tags"},{"id":13,"name":"other"},{"id":14,"name":"release tag creation"}]' \
-  PATH="$work/bin:$PATH" ci/protect-repo.sh acme/demo factory >/dev/null
+  FACTORY_APP_ID=4242 PATH="$work/bin:$PATH" ci/protect-repo.sh acme/demo factory >/dev/null
 if grep -q -- '--method PUT repos/acme/demo/rulesets/11' "$FAKE_GH_LOG" \
    && grep -q -- '--method PUT repos/acme/demo/rulesets/12' "$FAKE_GH_LOG" \
    && grep -q -- '--method PUT repos/acme/demo/rulesets/14' "$FAKE_GH_LOG" \

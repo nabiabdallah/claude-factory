@@ -20,17 +20,18 @@ open under B0; the owner said yes on 2026-11-17.
 - It is a separate ruleset because a bypass covers every rule in its ruleset. In one ruleset with `update` and
   `deletion`, the App could also move or delete a release tag. `release tags` keeps no bypass.
 - Both rulesets read the tag patterns from one list, so they can't drift apart. A test checks they match.
-- The App's id comes from `FACTORY_APP_ID`, or the script looks it up from the repo's `FACTORY_APP_SLUG` variable
-  (ADR 0021) with the admin's `gh` login. If it finds no numeric id it stops before writing anything.
-- `ci/test-protect-repo.sh` covers the ruleset, the lookup and the refusal.
+- The App's id comes from `FACTORY_APP_ID`: "App ID" at the top of the App's settings page. GitHub doesn't return
+  a private App to a user token (`GET /apps/<slug>` is a 404), so it can't be looked up; the first version tried and
+  stopped before writing anything (fixed the same day). Without a numeric id the script stops before any write.
+- `ci/test-protect-repo.sh` covers the ruleset and the refusal of a missing or non-numeric id.
 
 ## Alternatives considered
 - **Add `creation` and the bypass to `release tags`.** Rejected: the bypass would also let the App move or delete
   a release.
 - **Only the App, no admin bypass.** Rejected: a release could not be tagged by hand when `release-tag.yml` is
   broken, and fixing it needs a release.
-- **Hard-code the App's id.** Rejected: the App's API endpoint isn't public, so the id isn't known without a
-  login, and a recreated App (ADR 0021) would get a new one.
+- **Hard-code the App's id.** Rejected: a recreated App (ADR 0021) would get a new one, and the script would
+  silently give the bypass to an App that no longer exists.
 
 ## Consequences
 - Positive: a collaborator or a leaked write token can't publish a plugin or parent release.
