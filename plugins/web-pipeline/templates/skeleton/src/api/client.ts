@@ -34,9 +34,12 @@ async function problemOf(response: Response): Promise<Problem> {
 }
 
 async function request<T>(path: string, init: RequestInit): Promise<T> {
+  // Headers, not an object spread: a caller's HeadersInit may be a Headers object or an array of pairs.
+  const headers = new Headers(init.headers);
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json');
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}${path}`, { ...init, headers: { Accept: 'application/json', ...init.headers } });
+    response = await fetch(`${baseUrl}${path}`, { ...init, headers });
   } catch {
     throw new ApiError(0, 'The service could not be reached');
   }

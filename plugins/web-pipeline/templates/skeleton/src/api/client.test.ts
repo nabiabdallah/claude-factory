@@ -57,7 +57,7 @@ describe('api client', () => {
     const error = await apiGet('/things').catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status: 422, message: 'Insufficient funds', errorId: 'e-1' });
-    expect(String((error as ApiError).message)).not.toContain('account 123');
+    expect((error as ApiError).message).not.toContain('account 123');
   });
 
   it('gives a plain message when the error has no usable body', async () => {
