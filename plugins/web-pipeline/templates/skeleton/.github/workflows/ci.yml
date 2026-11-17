@@ -34,5 +34,10 @@ jobs:
       - name: Typecheck, lint, architecture rules, tests with coverage, build, bundle budget
         run: npm run verify
 
-      - name: No known high or critical vulnerability in the dependencies
-        run: npm audit --audit-level=high
+      # The gate is what ships: runtime dependencies. Advisories in the build tools are reported as a warning;
+      # they never reach the browser (factory ADR 0035).
+      - name: No known high or critical vulnerability in the runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Advisories in the dev tooling (reported, not a gate)
+        run: npm audit --audit-level=high || echo "::warning::npm audit reports high advisories in the dev tooling (see above)"
