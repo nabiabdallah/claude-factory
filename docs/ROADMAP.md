@@ -120,7 +120,7 @@ there. Use the owner's machine for steps that change the templates or factory-pa
   installation by hand) and PR #11's 0.20.1 files are merged.
 - **Apply the release-tag creation ruleset (ADR 0036)** after its PR merges: run
   `ci/protect-repo.sh nabiabdallah/claude-factory factory` with your admin `gh` login (a ruleset change is yours
-  alone). It looks up the App's id from `FACTORY_APP_SLUG`; check with `--dry-run` first if you like.
+  alone). It needs `FACTORY_APP_ID`: "App ID" at the top of github.com/settings/apps/nabiabdallah-factory-bot.
 - demo-service PR #6 (the A2 acceptance feature) was merged on 2026-11-13 on your word. Its code review left 4
   points to decide before the next feature copies them: a repeated `name` parameter is joined as "a,b"; 400
   validation is hand-built in the controller (DomainException maps to 422); "characters" means code points;

@@ -101,17 +101,15 @@ if (( ! dry )); then
   existing="$(gh api "repos/$repo/rulesets?includes_parents=false")"
 fi
 
-# The factory App's numeric id (not its client id): FACTORY_APP_ID, or looked up from the repo's FACTORY_APP_SLUG
-# variable (ADR 0021). A dry run calls nothing, so without FACTORY_APP_ID it prints null.
+# The factory App's numeric id (not its client id), from FACTORY_APP_ID: "App ID" at the top of the App's settings
+# page (github.com/settings/apps/<slug>). GitHub doesn't return a private App to a user token, so it can't be
+# looked up. A dry run without it prints null; a real run without it stops here, before any write.
 app_id="${FACTORY_APP_ID:-}"
-if [[ "$kind" == factory && -z "$app_id" ]]; then
-  if (( dry )); then app_id=null; else
-    slug="$(gh api "repos/$repo/actions/variables/FACTORY_APP_SLUG" | jq -r .value)"
-    app_id="$(gh api "apps/$slug" | jq -r .id)"
-  fi
-fi
-[[ "$kind" != factory || "$app_id" =~ ^[0-9]+$ || ( $dry -eq 1 && "$app_id" == null ) ]] \
-  || { echo "could not find the factory App's id (got '$app_id'); set FACTORY_APP_ID" >&2; exit 1; }
+if [[ "$kind" == factory && -z "$app_id" ]] && (( dry )); then app_id=null; fi
+[[ "$kind" != factory || "$app_id" =~ ^[0-9]+$ || ( $dry -eq 1 && "$app_id" == null ) ]] || {
+  echo "set FACTORY_APP_ID to the factory App's numeric id (got '$app_id'): \"App ID\" on github.com/settings/apps/<slug>" >&2
+  exit 1
+}
 
 upsert_ruleset "$main_ruleset"
 if [[ "$kind" == factory ]]; then
