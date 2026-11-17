@@ -121,17 +121,18 @@ there. Use the owner's machine for steps that change the templates or factory-pa
 - **Apply the release-tag creation ruleset (ADR 0036)** after its PR merges: run
   `ci/protect-repo.sh nabiabdallah/claude-factory factory` with your admin `gh` login (a ruleset change is yours
   alone). It needs `FACTORY_APP_ID`: "App ID" at the top of github.com/settings/apps/nabiabdallah-factory-bot.
-- demo-service PR #6 (the A2 acceptance feature) was merged on 2026-11-13 on your word. Its code review left 4
-  points to decide before the next feature copies them: a repeated `name` parameter is joined as "a,b"; 400
-  validation is hand-built in the controller (DomainException maps to 422); "characters" means code points;
-  `GreetCommand` doesn't validate itself.
+- (done 2026-11-17) demo-service PR #6's 4 review points, decided on the recommendations: names are a domain
+  value `PersonName` (400 via `InvalidInputException`), a repeated `name` is 400, length stays code points, the
+  commands take a `PersonName` (demo-service PR #14, merged).
 - Local leftovers: `~/dev/projects/demo-service` (0.18.0, never pushed) and `~/dev/projects/demo-service.stale-0.9.1`
   can be deleted, since B3 provisions the repo. Update the local plugin (`/plugin`), which is still at 0.9.1.
-- Review payments-service PR #10 (spec 0005).
-- After 2.0.0 is published, Dependabot will open a parent-upgrade PR in payments-service that fails without
-  the ADR 0010 code changes. Recommendation: close it, unless the owner wants payments-service upgraded.
-- #1 for payments-service (claude-factory is done, B0): with the owner's yes, make it public and run
-  `ci/protect-repo.sh nabiabdallah/payments-service service`.
+- **payments-service PR #10 (spec 0005):** reviewed 2026-11-17 (comment on the PR). The 6 decisions hold; one
+  should-fix before merge: the V3 rollout relies on a manual `Recreate` patch. Merging it and the ADR 0004
+  production gate are yours.
+- (done 2026-11-17) payments-service Dependabot PR #12 (factory-parent 2.x) closed. It may reopen for the next 2.x;
+  close it again, or comment `@dependabot ignore this major version` on it.
+- (declined 2026-11-17) payments-service stays private, so it gets no rulesets (the free plan has them only for
+  public repos).
 - Set the noreply commit email in both clones (`git config user.email
   99053318+nabiabdallah@users.noreply.github.com`); the sandbox can't write `.git/config`.
 
