@@ -9,7 +9,9 @@ const dir = 'dist/assets';
 const files = readdirSync(dir).filter((name) => /\.(js|css)$/.test(name));
 const bytes = files.reduce((sum, name) => sum + gzipSync(readFileSync(join(dir, name))).length, 0);
 const kb = bytes / 1024;
-console.log(`bundle: ${kb.toFixed(1)} kB gzipped in ${String(files.length)} files (budget ${String(budgetKb)} kB)`);
+console.log(
+  `bundle: ${kb.toFixed(1)} kB gzipped in ${String(files.length)} files (budget ${String(budgetKb)} kB)`,
+);
 if (files.length === 0 || kb > budgetKb) {
   console.error(files.length === 0 ? 'bundle: nothing was built' : 'bundle: over budget');
   process.exit(1);

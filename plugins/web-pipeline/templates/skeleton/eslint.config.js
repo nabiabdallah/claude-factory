@@ -9,7 +9,11 @@ export default tseslint.config(
   js.configs.recommended,
   {
     files: ['src/**/*.{ts,tsx}'],
-    extends: [...tseslint.configs.strictTypeChecked, jsxA11y.flatConfigs.strict, reactHooks.configs.flat.recommended],
+    extends: [
+      ...tseslint.configs.strictTypeChecked,
+      jsxA11y.flatConfigs.strict,
+      reactHooks.configs.flat.recommended,
+    ],
     languageOptions: {
       globals: globals.browser,
       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },

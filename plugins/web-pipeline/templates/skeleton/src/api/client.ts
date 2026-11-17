@@ -45,8 +45,13 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
   }
   if (!response.ok) {
     const problem = await problemOf(response);
-    const title = typeof problem.title === 'string' ? problem.title : `Request failed (${String(response.status)})`;
-    throw new ApiError(response.status, title, typeof problem.errorId === 'string' ? problem.errorId : undefined);
+    const title =
+      typeof problem.title === 'string' ? problem.title : `Request failed (${String(response.status)})`;
+    throw new ApiError(
+      response.status,
+      title,
+      typeof problem.errorId === 'string' ? problem.errorId : undefined,
+    );
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;

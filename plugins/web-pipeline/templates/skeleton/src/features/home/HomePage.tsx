@@ -5,7 +5,9 @@ export function HomePage() {
   return (
     <section>
       <PageTitle>Welcome</PageTitle>
-      <p className="mt-2 text-slate-700">This is the start page of app-skeleton. Features go in src/features.</p>
+      <p className="mt-2 text-slate-700">
+        This is the start page of app-skeleton. Features go in src/features.
+      </p>
     </section>
   );
 }

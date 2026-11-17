@@ -35,7 +35,9 @@ describe('api client', () => {
 
   it('posts JSON with the headers it was given', async () => {
     fetchMock.mockResolvedValue(respond(201, { id: '1' }));
-    await expect(apiPost<{ id: string }>('/things', { name: 'a' }, { 'Idempotency-Key': 'k' })).resolves.toEqual({
+    await expect(
+      apiPost<{ id: string }>('/things', { name: 'a' }, { 'Idempotency-Key': 'k' }),
+    ).resolves.toEqual({
       id: '1',
     });
     const init = fetchMock.mock.calls[0]?.[1];
@@ -52,7 +54,11 @@ describe('api client', () => {
 
   it("turns a problem document into an ApiError with the problem's title and error id", async () => {
     fetchMock.mockResolvedValue(
-      respond(422, { title: 'Insufficient funds', detail: 'account 123', errorId: 'e-1' }, 'application/problem+json'),
+      respond(
+        422,
+        { title: 'Insufficient funds', detail: 'account 123', errorId: 'e-1' },
+        'application/problem+json',
+      ),
     );
     const error = await apiGet('/things').catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
@@ -69,6 +75,9 @@ describe('api client', () => {
 
   it('says the service could not be reached when the request itself fails', async () => {
     fetchMock.mockRejectedValue(new TypeError('network down'));
-    await expect(apiGet('/things')).rejects.toMatchObject({ status: 0, message: 'The service could not be reached' });
+    await expect(apiGet('/things')).rejects.toMatchObject({
+      status: 0,
+      message: 'The service could not be reached',
+    });
   });
 });
