@@ -3,7 +3,7 @@
 # idempotently. Run once per repo with an admin `gh` login; re-run any time to restore the settings.
 #   ci/protect-repo.sh [--dry-run] <owner/repo> <factory|service>
 # --dry-run prints the requests as JSON lines and calls nothing. Rulesets are matched by name ("main",
-# "release tags"): created if missing, replaced if present; other rulesets are left alone.
+# "release tags", "release tag creation"): created if missing, replaced if present; other rulesets are left alone.
 set -euo pipefail
 
 usage() { echo "usage: $0 [--dry-run] <owner/repo> <factory|service>" >&2; exit 2; }
@@ -38,13 +38,25 @@ main_ruleset="$(jq -n --argjson checks "$checks" --argjson app "$github_actions"
       required_status_checks: [$checks[] | {context: ., integration_id: $app}]}}
   ]}')"
 
+release_tags='["refs/tags/java-pipeline-v*", "refs/tags/factory-parent-v*"]'
+
 # Projects pin these tags (ADR 0015): they may be created, never moved or deleted, and nobody bypasses that.
-tag_ruleset='{
-  "name": "release tags", "target": "tag", "enforcement": "active",
-  "conditions": {"ref_name": {"include": ["refs/tags/java-pipeline-v*", "refs/tags/factory-parent-v*"], "exclude": []}},
-  "bypass_actors": [],
-  "rules": [{"type": "update"}, {"type": "deletion"}, {"type": "non_fast_forward"}]
-}'
+tag_ruleset="$(jq -n --argjson tags "$release_tags" '{
+  name: "release tags", target: "tag", enforcement: "active",
+  conditions: {ref_name: {include: $tags, exclude: []}},
+  bypass_actors: [],
+  rules: [{type: "update"}, {type: "deletion"}, {type: "non_fast_forward"}]}')"
+
+# Only the factory App (release-tag.yml, ADR 0026) and repository admins (a tag pushed by hand) create them
+# (ADR 0036). A separate ruleset, so the bypass never reaches update or deletion above.
+tag_creation_ruleset() { # tag_creation_ruleset <App id>
+  jq -n --argjson tags "$release_tags" --argjson app "$1" --argjson admin "$admin_role" '{
+    name: "release tag creation", target: "tag", enforcement: "active",
+    conditions: {ref_name: {include: $tags, exclude: []}},
+    bypass_actors: [{actor_id: $app, actor_type: "Integration", bypass_mode: "always"},
+                    {actor_id: $admin, actor_type: "RepositoryRole", bypass_mode: "always"}],
+    rules: [{type: "creation"}]}'
+}
 
 security='{"security_and_analysis": {"secret_scanning": {"status": "enabled"},
   "secret_scanning_push_protection": {"status": "enabled"}}}'
@@ -89,8 +101,21 @@ if (( ! dry )); then
   existing="$(gh api "repos/$repo/rulesets?includes_parents=false")"
 fi
 
+# The factory App's numeric id (not its client id), from FACTORY_APP_ID: "App ID" at the top of the App's settings
+# page (github.com/settings/apps/<slug>). GitHub doesn't return a private App to a user token, so it can't be
+# looked up. A dry run without it prints null; a real run without it stops here, before any write.
+app_id="${FACTORY_APP_ID:-}"
+if [[ "$kind" == factory && -z "$app_id" ]] && (( dry )); then app_id=null; fi
+[[ "$kind" != factory || "$app_id" =~ ^[0-9]+$ || ( $dry -eq 1 && "$app_id" == null ) ]] || {
+  echo "set FACTORY_APP_ID to the factory App's numeric id (got '$app_id'): \"App ID\" on github.com/settings/apps/<slug>" >&2
+  exit 1
+}
+
 upsert_ruleset "$main_ruleset"
-[[ "$kind" == factory ]] && upsert_ruleset "$tag_ruleset"
+if [[ "$kind" == factory ]]; then
+  upsert_ruleset "$tag_ruleset"
+  upsert_ruleset "$(tag_creation_ruleset "$app_id")"
+fi
 send PATCH "repos/$repo" "$security"
 send PUT "repos/$repo/vulnerability-alerts"
 send PUT "repos/$repo/automated-security-fixes"

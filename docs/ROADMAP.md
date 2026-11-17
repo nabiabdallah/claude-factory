@@ -41,7 +41,7 @@ chain from starting them: it only runs a row with a bare id.
 | A1 ✅ | Autonomous-mode rules | Every action needed the owner's yes | Done: ADR 0017, PR #13 |
 | A2 ✅ | Headless runner | The pipeline only ran in an interactive session on the owner's machine | Done: ADRs 0018, 0023; java-pipeline 0.19.2. Accepted 2026-11-13 on demo-service: issue #3 with `factory:build` ended in feature PR #6 (run 43324062313, agent ~5 min, verify green in the gate and in the PR's CI), with an architect review, a test per criterion, and a code review |
 | A3 ✅ | Intake skill | Nothing turned an idea into a spec | Done: ADR 0019. Accepted 2026-11-13: issue #3 with `factory:spec` ended in spec PR #5 (run 43323066029), approved with the owner's answers and merged |
-| B0 ✅ | Guardrails applied, ADR 0020 | The never-list was a rule the agent followed, not one GitHub enforced | Done: ADR 0020, PR #17; `protect-repo.sh` applied 2026-11-12 (rulesets `main` and `release tags`, secret scanning, CodeQL, Dependabot security updates); a PR with a red required check showed `BLOCKED` (PR #18, closed). Release tags can't be moved or deleted; who may create them is still open (see "Waiting on the owner") |
+| B0 ✅ | Guardrails applied, ADR 0020 | The never-list was a rule the agent followed, not one GitHub enforced | Done: ADR 0020, PR #17; `protect-repo.sh` applied 2026-11-12 (rulesets `main` and `release tags`, secret scanning, CodeQL, Dependabot security updates); a PR with a red required check showed `BLOCKED` (PR #18, closed). Release tags can't be moved or deleted; from ADR 0036 only the factory App and admins create them (applied by the owner, see "Waiting on the owner") |
 | B1 ✅ | Factory identity | The factory acted as the owner, and PRs opened with `GITHUB_TOKEN` didn't start CI | Done: ADR 0021, PR #19. App `nabiabdallah-factory-bot` (contents, pull requests, issues, workflows), installed on claude-factory; the identity check was green on 2026-11-12 (bot PR #20 started CI by itself) |
 | B2 ✅ | Factory steps run in Actions | Factory work ran on the owner's laptop, in a sandbox that blocks `gh`, Maven Central, Docker and release assets | Done: ADR 0022, PR #21. The first unattended run (2026-11-12, ~7 min) took B2a and opened bot PR #22, which had green CI and was merged |
 | B2a ✅ | Two-job service runner | The service runner (ADR 0018) gates and publishes from the checkout the agent could rewrite, so a rewritten `factory-run.sh` would pass its own gate and publish with the write token | `factory-feature.yml` in both templates split like ADR 0022: the agent job hands over a bundle and the report; the gate (including `./mvnw verify`) and publish run on a fresh checkout of the base. `ci/test-factory-run.sh` covers an agent that rewrites the runner. New java-pipeline minor release with an Upgrading note. Done: ADR 0023, java-pipeline 0.19.0 (four jobs: agent, gate, publish, report; the tag follows the merge, see "Waiting on the owner") |
@@ -109,32 +109,30 @@ there. Use the owner's machine for steps that change the templates or factory-pa
 - (done 2026-11-15) market-rates is on java-pipeline 0.22.1 (PRs #12, #13); its `image` job pushed, signed and
   attested the two-platform image (run 43761587639). `promote.yml` opened the first promotions as the App; staging
   and prod are both at `82b7428` (PRs #14, #15), waiting for a cluster to pull them.
-- **Set `CLAUDE_TOKEN_EXPIRES`** (YYYY-MM-DD) to when the Claude token's year ends; the weekly digest warns from it.
+- (done 2026-11-17) `CLAUDE_TOKEN_EXPIRES` set to 2027-11-12; the digest warns from 30 days before.
 - (done) B7 merged; the first digest posted to inbox issue #36; template-drift PRs to services wait (ADR 0032).
 - (done) Merging B6's PR started step B7 unattended.
 - (done) Merging B5's PR started step B6 unattended (as B4 did for B5); `FACTORY_PAUSED=true` holds it, and from now
   also holds auto-merge. B5 acts on real PRs only after the merge: open a docs-only PR to see `risk:low` merge by
   itself. If the reviewer's `--allowedTools` flags don't behave on the pinned CLI, the first run fails (red, not
   merged); say so and a session fixes it.
-- **Give demo-service the App (0.20.1, ADR 0028):** run
-  `gh workflow run service-app.yml --repo nabiabdallah/claude-factory -f name=demo-service` (a session may not: it
-  copies a secret). If the run warns that it could not add the repo to the App, add demo-service at the link it
-  prints and run it again. demo-service PR #11 brings the 0.20.1 files; after both, the next runner PR there
-  should go green with no click.
-- **Who may create release tags:** today anyone with write access. Recommendation: a second tag ruleset that
-  restricts creation to the factory App and repository admins, added to `ci/protect-repo.sh` and applied by you
-  (a ruleset change is yours alone).
-- demo-service PR #6 (the A2 acceptance feature) was merged on 2026-11-13 on your word. Its code review left 4
-  points to decide before the next feature copies them: a repeated `name` parameter is joined as "a,b"; 400
-  validation is hand-built in the controller (DomainException maps to 422); "characters" means code points;
-  `GreetCommand` doesn't validate itself.
+- (done 2026-11-17) demo-service has the App (`service-app.yml` run 44167305326, after adding it to the
+  installation by hand) and PR #11's 0.20.1 files are merged.
+- **Apply the release-tag creation ruleset (ADR 0036)** after its PR merges: run
+  `ci/protect-repo.sh nabiabdallah/claude-factory factory` with your admin `gh` login (a ruleset change is yours
+  alone). It needs `FACTORY_APP_ID`: "App ID" at the top of github.com/settings/apps/nabiabdallah-factory-bot.
+- (done 2026-11-17) demo-service PR #6's 4 review points, decided on the recommendations: names are a domain
+  value `PersonName` (400 via `InvalidInputException`), a repeated `name` is 400, length stays code points, the
+  commands take a `PersonName` (demo-service PR #14, merged).
 - Local leftovers: `~/dev/projects/demo-service` (0.18.0, never pushed) and `~/dev/projects/demo-service.stale-0.9.1`
   can be deleted, since B3 provisions the repo. Update the local plugin (`/plugin`), which is still at 0.9.1.
-- Review payments-service PR #10 (spec 0005).
-- After 2.0.0 is published, Dependabot will open a parent-upgrade PR in payments-service that fails without
-  the ADR 0010 code changes. Recommendation: close it, unless the owner wants payments-service upgraded.
-- #1 for payments-service (claude-factory is done, B0): with the owner's yes, make it public and run
-  `ci/protect-repo.sh nabiabdallah/payments-service service`.
+- **payments-service PR #10 (spec 0005):** reviewed 2026-11-17 (comment on the PR). The 6 decisions hold; one
+  should-fix before merge: the V3 rollout relies on a manual `Recreate` patch. Merging it and the ADR 0004
+  production gate are yours.
+- (done 2026-11-17) payments-service Dependabot PR #12 (factory-parent 2.x) closed. It may reopen for the next 2.x;
+  close it again, or comment `@dependabot ignore this major version` on it.
+- (declined 2026-11-17) payments-service stays private, so it gets no rulesets (the free plan has them only for
+  public repos).
 - Set the noreply commit email in both clones (`git config user.email
   99053318+nabiabdallah@users.noreply.github.com`); the sandbox can't write `.git/config`.
 
