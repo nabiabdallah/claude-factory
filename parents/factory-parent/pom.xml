@@ -26,7 +26,7 @@
   <properties>
     <java.version>21</java.version>
     <archunit.version>1.5.1</archunit.version>
-    <spotless.version>3.10.4</spotless.version>
+    <spotless.version>3.11.0</spotless.version>
     <!-- Real Postgres for tests, no Docker (works inside the Claude Code sandbox): add-postgres skill. -->
     <embedded-postgres.version>2.2.2</embedded-postgres.version>
     <embedded-postgres-binaries.version>18.6.0</embedded-postgres-binaries.version>
@@ -38,7 +38,7 @@
     <factory.image.registry>ghcr.io/nabiabdallah</factory.image.registry>
     <!-- Build hygiene (claude-factory ADR 0013). Build-only plugins, nothing ships in the service. -->
     <extra-enforcer-rules.version>1.12.1</extra-enforcer-rules.version>
-    <jacoco.version>0.8.15</jacoco.version>
+    <jacoco.version>0.8.16</jacoco.version>
     <!-- Not managed by Spring Boot; pinned so requirePluginVersions passes (Maven's default site binding). -->
     <maven-site-plugin.version>3.22.0</maven-site-plugin.version>
     <!-- Coverage floor. A service may raise these in its POM; a lower value fails the Enforcer rule below. -->
