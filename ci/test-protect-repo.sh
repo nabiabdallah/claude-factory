@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Tests ci/protect-repo.sh (factory ADR 0016) without touching GitHub: the --dry-run requests are checked with jq
 # against the guardrails the owner approved, the required check names against the real workflow jobs, and the
-# apply path against a fake `gh` (refuses a private repo; creates a missing ruleset, updates an existing one).
+# apply path against a fake `gh` (refuses a private repo or an unknown App; creates a missing ruleset, updates an
+# existing one; looks up the App id).
 #   ci/test-protect-repo.sh        (from the repo root; needs jq)
 set -euo pipefail
 
@@ -32,6 +33,8 @@ printf 'READ %s\n' "$*" >> "$log"
 case "$*" in
   "api repos/acme/demo") printf '{"visibility":"%s"}\n' "$FAKE_VISIBILITY" ;;
   "api repos/acme/demo/rulesets?includes_parents=false") printf '%s\n' "$FAKE_RULESETS" ;;
+  "api repos/acme/demo/actions/variables/FACTORY_APP_SLUG") echo '{"name":"FACTORY_APP_SLUG","value":"factory-bot"}' ;;
+  "api apps/factory-bot") printf '%s\n' "${FAKE_APP:-{\"id\":4242,\"slug\":\"factory-bot\"\}}" ;;
   *) echo "fake gh: unexpected call: $*" >&2; exit 1 ;;
 esac
 GH
@@ -46,7 +49,7 @@ done
 
 # --- dry run makes no gh calls
 : > "$FAKE_GH_LOG"
-PATH="$work/bin:$PATH" ci/protect-repo.sh --dry-run acme/demo factory > "$work/factory.jsonl"
+FACTORY_APP_ID=4242 PATH="$work/bin:$PATH" ci/protect-repo.sh --dry-run acme/demo factory > "$work/factory.jsonl"
 PATH="$work/bin:$PATH" ci/protect-repo.sh --dry-run acme/demo service > "$work/service.jsonl"
 if [[ -s "$FAKE_GH_LOG" ]]; then bad "dry run calls gh"; else ok "dry run makes no gh calls"; fi
 
@@ -112,13 +115,29 @@ check "factory: release tags can't be updated or deleted, by anyone" \
      and (.conditions.ref_name.include | sort) == ["refs/tags/factory-parent-v*", "refs/tags/java-pipeline-v*"]
      and ([.rules[].type] | sort) == ["deletion", "non_fast_forward", "update"] and .bypass_actors == [])' \
   "$work/factory.jsonl"
+check "factory: release tags are created only by the factory App and repository admins" \
+  '[.[] | select(.name == "release tag creation") | .body] | length == 1 and (.[0] | .target == "tag"
+     and .enforcement == "active"
+     and (.conditions.ref_name.include | sort) == ["refs/tags/factory-parent-v*", "refs/tags/java-pipeline-v*"]
+     and [.rules[].type] == ["creation"]
+     and (.bypass_actors | sort_by(.actor_type)) == [
+       {"actor_id": 4242, "actor_type": "Integration", "bypass_mode": "always"},
+       {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}])' \
+  "$work/factory.jsonl"
+check "factory: both tag rulesets cover the same tags" \
+  '[.[] | select(.body.target? == "tag") | .body.conditions.ref_name.include | sort] | length == 2 and .[0] == .[1]' \
+  "$work/factory.jsonl"
+if PATH="$work/bin:$PATH" ci/protect-repo.sh --dry-run acme/demo factory 2>/dev/null \
+    | jq -e -s 'any(.[]; .name == "release tag creation" and .body.bypass_actors[0].actor_id == null)' >/dev/null; then
+  ok "factory dry run without FACTORY_APP_ID prints a null App id"
+else bad "factory dry run without FACTORY_APP_ID prints a null App id"; fi
 check "factory: Actions may open PRs (base-image.yml)" \
   'any(.[]; .path == "repos/acme/demo/actions/permissions/workflow" and .body.can_approve_pull_request_reviews == true)' \
   "$work/factory.jsonl"
 check "service: Actions may open PRs (the unattended runner)" \
   'any(.[]; .path == "repos/acme/demo/actions/permissions/workflow" and .body.can_approve_pull_request_reviews == true and .body.default_workflow_permissions == "read")' \
   "$work/service.jsonl"
-check "service: no tag ruleset" '[.[] | select(.name == "release tags")] | length == 0' "$work/service.jsonl"
+check "service: no tag rulesets" '[.[] | select(.body.target? == "tag")] | length == 0' "$work/service.jsonl"
 
 # --- apply, against the fake gh
 : > "$FAKE_GH_LOG"
@@ -130,15 +149,25 @@ fi
 : > "$FAKE_GH_LOG"
 FAKE_VISIBILITY=public FAKE_RULESETS='[]' PATH="$work/bin:$PATH" ci/protect-repo.sh acme/demo factory >/dev/null
 if grep -q -- '--method POST repos/acme/demo/rulesets' "$FAKE_GH_LOG" \
-   && [[ "$(grep -c -- '--method POST repos/acme/demo/rulesets' "$FAKE_GH_LOG")" -eq 2 ]]; then
-  ok "missing rulesets are created (POST x2)"
-else bad "missing rulesets are created (POST x2)"; sed 's/^/    /' "$FAKE_GH_LOG"; fi
+   && [[ "$(grep -c -- '--method POST repos/acme/demo/rulesets' "$FAKE_GH_LOG")" -eq 3 ]]; then
+  ok "missing rulesets are created (POST x3)"
+else bad "missing rulesets are created (POST x3)"; sed 's/^/    /' "$FAKE_GH_LOG"; fi
+if grep -qx 'READ api apps/factory-bot' "$FAKE_GH_LOG" && grep -q '"actor_id":4242,"actor_type":"Integration"' <(tr -d ' \n' < "$FAKE_GH_LOG"); then
+  ok "the App id is looked up from FACTORY_APP_SLUG"
+else bad "the App id is looked up from FACTORY_APP_SLUG"; sed 's/^/    /' "$FAKE_GH_LOG"; fi
 
 : > "$FAKE_GH_LOG"
-FAKE_VISIBILITY=public FAKE_RULESETS='[{"id":11,"name":"main"},{"id":12,"name":"release tags"},{"id":13,"name":"other"}]' \
+if FAKE_APP='{"message":"Not Found"}' FAKE_VISIBILITY=public FAKE_RULESETS='[]' PATH="$work/bin:$PATH" \
+    ci/protect-repo.sh acme/demo factory >/dev/null 2>&1; then bad "unknown App id refused"; else
+  if grep -q -- '--method' "$FAKE_GH_LOG"; then bad "unknown App id: nothing written"; else ok "unknown App id refused, nothing written"; fi
+fi
+
+: > "$FAKE_GH_LOG"
+FAKE_VISIBILITY=public FAKE_RULESETS='[{"id":11,"name":"main"},{"id":12,"name":"release tags"},{"id":13,"name":"other"},{"id":14,"name":"release tag creation"}]' \
   PATH="$work/bin:$PATH" ci/protect-repo.sh acme/demo factory >/dev/null
 if grep -q -- '--method PUT repos/acme/demo/rulesets/11' "$FAKE_GH_LOG" \
    && grep -q -- '--method PUT repos/acme/demo/rulesets/12' "$FAKE_GH_LOG" \
+   && grep -q -- '--method PUT repos/acme/demo/rulesets/14' "$FAKE_GH_LOG" \
    && ! grep -q -- 'rulesets/13' "$FAKE_GH_LOG" && ! grep -q -- '--method POST repos/acme/demo/rulesets' "$FAKE_GH_LOG"; then
   ok "existing rulesets are updated by name (PUT), others untouched"
 else bad "existing rulesets are updated by name (PUT), others untouched"; sed 's/^/    /' "$FAKE_GH_LOG"; fi
