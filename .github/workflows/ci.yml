@@ -323,10 +323,72 @@ jobs:
           plugins/java-pipeline/skills/new-project/scripts/new-project.sh ci-skeleton com.acme.customers "$RUNNER_TEMP/projects"
           ci/test-build-hygiene.sh "$RUNNER_TEMP/projects/ci-skeleton"
 
+  # The web-pipeline skeleton (factory ADR 0035) as a project's CI runs it: install from the lockfile, verify,
+  # audit; then its image, built and scanned like the Java templates' (factory ADR 0009).
+  web-template:
+    needs: changes
+    if: needs.changes.outputs.scope == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: plugins/web-pipeline/templates/skeleton
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: plugins/web-pipeline/templates/skeleton/.nvmrc
+          cache: npm
+          cache-dependency-path: plugins/web-pipeline/templates/skeleton/package-lock.json
+
+      - name: Install exactly what the lockfile says (npm ci)
+        id: install
+        run: npm ci
+
+      # When package.json and the lockfile disagree, the job still fails, but leaves the lockfile npm would write
+      # as an artifact, to review and commit. It never replaces the committed one.
+      - name: Lockfile out of date? Generate the one to commit
+        if: failure() && steps.install.outcome == 'failure'
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit
+          echo "::error::package-lock.json doesn't match package.json; commit the 'package-lock' artifact of this run"
+      - name: Keep the generated lockfile
+        if: failure() && steps.install.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-lock
+          path: plugins/web-pipeline/templates/skeleton/package-lock.json
+          if-no-files-found: error
+
+      - name: Verify (typecheck, lint, architecture rules, tests with coverage, build, bundle budget)
+        run: npm run verify
+
+      - name: No known high or critical vulnerability in the dependencies
+        run: npm audit --audit-level=high
+
+      - name: Build the image (unprivileged nginx serving dist/)
+        run: |
+          docker build -t web-skeleton:ci .
+          docker save -o "$RUNNER_TEMP/web-skeleton.tar" web-skeleton:ci
+          # It runs as nginx's unprivileged user and serves the app, also on a path only the router knows.
+          docker run -d --name web -p 127.0.0.1:8080:8080 web-skeleton:ci
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:8080/ >/dev/null && break; sleep 1; done
+          test "$(docker exec web id -u)" = 101
+          curl -sf http://127.0.0.1:8080/ | grep -q '<div id="root"></div>'
+          curl -sf http://127.0.0.1:8080/some/route | grep -q '<div id="root"></div>'
+          docker rm -f web
+
+      - name: Scan the image (Trivy, as template CI does)
+        run: |
+          "$GITHUB_WORKSPACE/plugins/java-pipeline/templates/skeleton/.github/scripts/ci-tools.sh" trivy
+          "$RUNNER_TEMP/ci-bin/trivy" image --input "$RUNNER_TEMP/web-skeleton.tar" \
+            --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1
+
   # The required check. It reports on every run, also when a job above failed or was skipped.
   template:
     name: Template builds and new-project works
-    needs: [changes, scripts, templates, new-project, postgres, resource-server, build-rules]
+    needs: [changes, scripts, templates, new-project, postgres, resource-server, build-rules, web-template]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -345,6 +407,7 @@ jobs:
             postgres ${{ needs.postgres.result }}
             resource-server ${{ needs.resource-server.result }}
             build-rules ${{ needs.build-rules.result }}
+            web-template ${{ needs.web-template.result }}
 
   manifests:
     name: Kubernetes manifests render and match the schemas

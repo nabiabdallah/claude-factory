@@ -7,7 +7,7 @@ set -euo pipefail
 fail=0
 problem() { echo "FAIL: $*"; fail=1; }
 
-workflows=$(find .github/workflows plugins/java-pipeline/templates/*/.github/workflows -name '*.yml')
+workflows=$(find .github/workflows plugins/*/templates/*/.github/workflows -name '*.yml')
 
 # 1. Every Action is pinned to a full commit SHA (tags can be moved; a SHA can't).
 while IFS= read -r line; do
@@ -17,6 +17,10 @@ done < <(grep -HnE '^\s*-?\s*uses:' $workflows | grep -vE 'uses:\s*[^@[:space:]]
 # 2. The base image is pinned to a digest.
 base=$(sed -n 's|.*<factory.image.base>\(.*\)</factory.image.base>.*|\1|p' parents/factory-parent/pom.xml)
 [[ "$base" =~ @sha256:[0-9a-f]{64}$ ]] || problem "factory.image.base is not pinned to a digest: $base"
+# The web templates build their image from a Dockerfile (factory ADR 0035): every FROM is pinned the same way.
+while IFS= read -r line; do
+  problem "Dockerfile base not pinned to a digest: $line"
+done < <(grep -HnE '^FROM ' plugins/web-pipeline/templates/*/Dockerfile | grep -vE '^[^:]+:[0-9]+:FROM [^[:space:]]+@sha256:[0-9a-f]{64}(\s|$)' || true)
 
 # 3. Downloaded tools are pinned by version and sha256.
 for t in plugins/java-pipeline/templates/*; do
