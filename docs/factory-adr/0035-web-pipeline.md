@@ -41,6 +41,13 @@ The owner approved the plan with all seven recommendations on 2026-11-15, and sa
   where Trivy gates on the image, not on Maven plugins. Rejected: an allowlist with expiry (npm has none built in;
   it needs a script or a new dependency), and keeping the full gate and waiting.
 
+- **Base image packages (amendment, 2026-11-17, owner's choice):** the web image runs `apk upgrade` at build time
+  on top of the pinned `nginx-unprivileged` base, then drops back to uid 101. F1's first scan found 13 Alpine CVEs
+  (1 critical, brotli) that were already fixed in Alpine, but the newest stable base (1.30.6, built 2026-10-19)
+  still had them. The trade-off: two builds of one commit may differ in OS packages; the scan after every build
+  (and, from F3, the signature) records what ships. Rejected: ignoring the CVEs with an expiry until upstream
+  rebuilds, and a self-built base (left to F3).
+
 ## Alternatives considered
 The plan lists one per choice (Next.js or Vue; a monorepo; a static host; MUI; a backend-for-frontend; hand-written
 fetch calls; end-to-end tests against the real service). For the runner:
