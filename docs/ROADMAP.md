@@ -118,9 +118,9 @@ there. Use the owner's machine for steps that change the templates or factory-pa
   merged); say so and a session fixes it.
 - (done 2026-11-17) demo-service has the App (`service-app.yml` run 44167305326, after adding it to the
   installation by hand) and PR #11's 0.20.1 files are merged.
-- **Apply the release-tag creation ruleset (ADR 0036)** after its PR merges: run
-  `ci/protect-repo.sh nabiabdallah/claude-factory factory` with your admin `gh` login (a ruleset change is yours
-  alone). It needs `FACTORY_APP_ID`: "App ID" at the top of github.com/settings/apps/nabiabdallah-factory-bot.
+- (done 2026-11-17) Release-tag creation ruleset (ADR 0036) applied: only the factory App (id 5734580) and repository
+  admins create `java-pipeline-v*` / `factory-parent-v*` tags. The next tag from `release-tag.yml` is its first real
+  test; if that run is refused, the App id or the bypass is wrong.
 - (done 2026-11-17) demo-service PR #6's 4 review points, decided on the recommendations: names are a domain
   value `PersonName` (400 via `InvalidInputException`), a repeated `name` is 400, length stays code points, the
   commands take a `PersonName` (demo-service PR #14, merged).
