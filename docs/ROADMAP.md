@@ -124,15 +124,11 @@ there. Use the owner's machine for steps that change the templates or factory-pa
 - (done 2026-11-17) demo-service PR #6's 4 review points, decided on the recommendations: names are a domain
   value `PersonName` (400 via `InvalidInputException`), a repeated `name` is 400, length stays code points, the
   commands take a `PersonName` (demo-service PR #14, merged).
-- Local leftovers: `~/dev/projects/demo-service` (0.18.0, never pushed) and `~/dev/projects/demo-service.stale-0.9.1`
-  can be deleted, since B3 provisions the repo. Update the local plugin (`/plugin`), which is still at 0.9.1.
-- **payments-service PR #10 (spec 0005):** reviewed 2026-11-17 (comment on the PR). The 6 decisions hold; one
-  should-fix before merge: the V3 rollout relies on a manual `Recreate` patch. Merging it and the ADR 0004
-  production gate are yours.
-- (done 2026-11-17) payments-service Dependabot PR #12 (factory-parent 2.x) closed. It may reopen for the next 2.x;
-  close it again, or comment `@dependabot ignore this major version` on it.
-- (declined 2026-11-17) payments-service stays private, so it gets no rulesets (the free plan has them only for
-  public repos).
+- (done 2026-11-17) The two stale local demo-service clones were deleted (one scaffold commit each, never pushed).
+  Still yours: update the local plugin (`/plugin`), which is at 0.9.1.
+- (dropped 2026-11-17) payments-service: the owner doesn't care about it. It was only for testing the factory. It
+  stays private, with no rulesets; PR #10 (spec 0005, reviewed in a PR comment) and later Dependabot PRs there are
+  not followed up. The guardrails step below is done for claude-factory, which is what it needed.
 - Set the noreply commit email in both clones (`git config user.email
   99053318+nabiabdallah@users.noreply.github.com`); the sandbox can't write `.git/config`.
 
