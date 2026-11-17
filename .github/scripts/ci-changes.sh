@@ -7,7 +7,7 @@
 #             must have succeeded, or been skipped when the scope is docs.
 set -euo pipefail
 
-build_jobs="templates new-project postgres resource-server build-rules"
+build_jobs="templates new-project postgres resource-server build-rules web-template"
 
 case "${1:-}" in
   scope)

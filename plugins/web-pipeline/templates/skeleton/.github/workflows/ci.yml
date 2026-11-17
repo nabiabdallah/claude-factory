@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The required check `verify` (no `name:`, so the job id is the status context): the same `npm run verify`
+  # the Stop hook and the unattended runner call, after an install from the lockfile only.
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install exactly what the lockfile says
+        run: npm ci
+
+      - name: Typecheck, lint, architecture rules, tests with coverage, build, bundle budget
+        run: npm run verify
+
+      # The gate is what ships: runtime dependencies. Advisories in the build tools are reported as a warning;
+      # they never reach the browser (factory ADR 0035).
+      - name: No known high or critical vulnerability in the runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Advisories in the dev tooling (reported, not a gate)
+        run: npm audit --audit-level=high || echo "::warning::npm audit reports high advisories in the dev tooling (see above)"

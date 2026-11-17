@@ -33,7 +33,7 @@ scope full "a path with a newline trick"      $'docs/a.md\nci/x.sh'
 got="$(: | "$s" scope)"; [[ "$got" == full ]] && ok "scope: no paths -> full" || bad "scope: no paths -> $got"
 got="$(printf '\n\n' | "$s" scope)"; [[ "$got" == full ]] && ok "scope: blank lines only -> full" || bad "scope: blank lines -> $got"
 
-heavy="templates new-project postgres resource-server build-rules"
+heavy="templates new-project postgres resource-server build-rules web-template"
 results() { # results <changes> <scripts> <heavy result>
   printf 'changes %s\nscripts %s\n' "$1" "$2"; local j; for j in $heavy; do echo "$j $3"; done
 }

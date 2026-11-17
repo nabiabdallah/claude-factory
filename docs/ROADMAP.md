@@ -67,7 +67,7 @@ while C1 waits for its VM; C1's acceptance comes first once the VM exists. Nothi
 | # | Step | Done when |
 |---|---|---|
 | F0 ✅ | Runner reads the plugin, verify command and protected paths from the project | Done: java-pipeline 0.23.0. `.github/factory.conf`, read from the base commit; Java services need none. `ci/test-factory-run.sh` covers a non-Maven project |
-| F1 | `web-pipeline` skeleton template (React, TypeScript, Vite) and its CI | Factory CI builds it: `npm ci`, `npm run verify`, image build and scan |
+| F1 ✅ | `web-pipeline` skeleton template (React, TypeScript, Vite) and its CI | Done 2026-11-17, PR #49: factory job `web-template` green (npm ci from the lockfile, `npm run verify` with 16 tests, audit, image run as uid 101, Trivy scan); the template has its own `verify` workflow. Two amendments to ADR 0035: the audit gates runtime dependencies only (picomatch GHSA-fc5q-39xc-vjpf has no fix), and the image runs `apk upgrade` on the pinned base (the newest stable nginx base carried 13 fixed Alpine CVEs). ESLint stays on 9 and TypeScript on 6.0 until `eslint-plugin-jsx-a11y` and `typescript-eslint` support the newer majors |
 | F2 (waits for the owner) | Plugin: agents, `new-project`, `new-feature`, `intake`, hooks | The plan recommends A5 first, so the web agents don't copy the banking checks; A5 is deferred (ADR 0029). The owner decides the order |
 | F3 | Deploy: nginx image, overlays, deploy gate, CSP | kubeconform and `test-check-deploy.sh` pass on a generated UI project |
 | F4 | Contract: OpenAPI from the Java template, generated client, drift check | A changed endpoint in the service fails the UI build until the client is regenerated |
@@ -118,9 +118,9 @@ there. Use the owner's machine for steps that change the templates or factory-pa
   merged); say so and a session fixes it.
 - (done 2026-11-17) demo-service has the App (`service-app.yml` run 44167305326, after adding it to the
   installation by hand) and PR #11's 0.20.1 files are merged.
-- **Apply the release-tag creation ruleset (ADR 0036)** after its PR merges: run
-  `ci/protect-repo.sh nabiabdallah/claude-factory factory` with your admin `gh` login (a ruleset change is yours
-  alone). It needs `FACTORY_APP_ID`: "App ID" at the top of github.com/settings/apps/nabiabdallah-factory-bot.
+- (done 2026-11-17) Release-tag creation ruleset (ADR 0036) applied: only the factory App (id 5734580) and repository
+  admins create `java-pipeline-v*` / `factory-parent-v*` tags. The next tag from `release-tag.yml` is its first real
+  test; if that run is refused, the App id or the bypass is wrong.
 - (done 2026-11-17) demo-service PR #6's 4 review points, decided on the recommendations: names are a domain
   value `PersonName` (400 via `InvalidInputException`), a repeated `name` is 400, length stays code points, the
   commands take a `PersonName` (demo-service PR #14, merged).

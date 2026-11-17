@@ -36,7 +36,7 @@ if lint "$work/bad.yml" >/dev/null 2>&1; then
   echo "FAIL: actionlint accepts the runner context in job-level env; this check would not catch 0.19.0's defect"; exit 1
 fi
 
-mapfile -t files < <(find .github/workflows plugins/java-pipeline/templates/*/.github/workflows -name '*.yml' | sort)
+mapfile -t files < <(find .github/workflows plugins/*/templates/*/.github/workflows -name '*.yml' | sort)
 if lint "${files[@]}"; then
   echo "workflow lint: OK (${#files[@]} workflows)"
 else

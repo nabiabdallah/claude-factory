@@ -32,6 +32,22 @@ The owner approved the plan with all seven recommendations on 2026-11-15, and sa
 - **Steps F0 to F6** are in the roadmap, outside the unattended queue. F2 (the agents) waits for the owner's
   word on its order with A5 (domain rules out of the agents), which the plan recommends first and ADR 0029 defers.
 
+- **Dependency audit (amendment, 2026-11-17, owner's choice):** `npm audit --omit=dev --audit-level=high` is the
+  gate, so only advisories in the runtime dependencies (what ships in the bundle) fail the build. The full audit
+  still runs on every build and reports dev-tool advisories as a warning. Why: F1's first full run met
+  GHSA-fc5q-39xc-vjpf (picomatch ReDoS). It affects every picomatch version, and through it vite, vitest,
+  typescript-eslint and dependency-cruiser, with no fixed release. Gating on it would block every web project
+  until upstream ships a fix, for a flaw in build tools that never reach the browser. This matches the Java side,
+  where Trivy gates on the image, not on Maven plugins. Rejected: an allowlist with expiry (npm has none built in;
+  it needs a script or a new dependency), and keeping the full gate and waiting.
+
+- **Base image packages (amendment, 2026-11-17, owner's choice):** the web image runs `apk upgrade` at build time
+  on top of the pinned `nginx-unprivileged` base, then drops back to uid 101. F1's first scan found 13 Alpine CVEs
+  (1 critical, brotli) that were already fixed in Alpine, but the newest stable base (1.30.6, built 2026-10-19)
+  still had them. The trade-off: two builds of one commit may differ in OS packages; the scan after every build
+  (and, from F3, the signature) records what ships. Rejected: ignoring the CVEs with an expiry until upstream
+  rebuilds, and a self-built base (left to F3).
+
 ## Alternatives considered
 The plan lists one per choice (Next.js or Vue; a monorepo; a static host; MUI; a backend-for-frontend; hand-written
 fetch calls; end-to-end tests against the real service). For the runner:
